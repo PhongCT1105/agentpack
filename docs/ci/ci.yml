@@ -32,3 +32,12 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
+      # Redundant with the full run above by construction, but named as an
+      # explicit gate: secret-leak tests are release-blocking and must never
+      # be filtered out of a release pipeline (docs/architecture.md). The
+      # grep guards against the gate passing vacuously if tests are renamed.
+      - name: Release-blocking secret-leak tests
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -run TestReleaseBlocking -v ./internal/secrets/ 2>&1 | grep -e "--- PASS: TestReleaseBlocking"

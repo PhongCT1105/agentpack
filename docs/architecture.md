@@ -108,7 +108,7 @@ agentpack/
 
 - **Fixture-driven adapter tests**: each adapter has `testdata/` trees replicating real tool config layouts (sanitized). `Scan` fixtures → expected inventory golden files; `Plan` component sets → expected file-operation golden files.
 - **Round-trip tests**: scan fixtures → save → restore into a temp dir → re-scan → inventories must match.
-- **Secret-leak tests are release-blocking**: fixtures seeded with fake tokens (in recognizable formats: `ghp_…`, `sk-…`, AWS keys, JWTs, high-entropy strings) must never survive into a saved pack.
+- **Secret-leak tests are release-blocking**: fixtures seeded with fake tokens (in recognizable formats: `ghp_…`, `sk-…`, AWS keys, JWTs, high-entropy strings) must never survive into a saved pack. These tests are named `TestReleaseBlocking_*` — they run in every ordinary `go test ./...`, and CI/release pipelines additionally run `go test -run TestReleaseBlocking ./...` as an explicit gate that cannot be filtered out. (A Go build tag would exclude them from default runs, which is the opposite of the intent.)
 - Cross-platform CI (macOS, Linux, Windows) since path handling is core to the product.
 
 ## Design principles

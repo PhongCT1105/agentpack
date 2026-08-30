@@ -1,0 +1,3 @@
+# Conventions
+
+export AWS_SECRET_ACCESS_KEY=FAKEwJx7+Qm2Lp9ZrTv4/Kd8HnBs3YcG
