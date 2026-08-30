@@ -31,7 +31,11 @@ Paths are macOS/Linux; Windows equivalents to be added per adapter (`%USERPROFIL
 
 **Never port:** `~/.codex/auth.json` (and backups of it), caches, session state.
 
-**Notes:** `config.toml` is TOML, mixed settings + MCP; adapter merges `[mcp_servers.*]` tables surgically. Skills/agents have no Codex-native equivalent yet — pack components targeting only Codex skip them with a warning. Remote-server entries may also carry `bearer_token_env_var` / `http_headers` keys *(verify against current Codex)* — the scanner ignores them today; the `Plan()` work (P3.5) should model them as credential injection points.
+**Notes:** `config.toml` is TOML, mixed settings + MCP; adapter merges `[mcp_servers.*]` tables surgically. Skills/agents have no Codex-native equivalent yet — pack components targeting only Codex skip them with a warning.
+
+**Remote-auth keys (confirmed against OpenAI's Codex MCP docs while building `Plan()`):** `url`, `bearer_token_env_var`, `http_headers`, `env_http_headers`, and the stdio pair `env` (literal values) / `env_vars` (names forwarded from Codex's own environment). The docs are explicit that you should never hardcode or interpolate environment variables, which is why the adapter prefers indirection everywhere it exists. Two residual unknowns: `env_vars` is newer than `env`, so an older Codex may ignore it, and it is unconfirmed whether Codex rejects unknown keys.
+
+**Project-scoped MCP — matrix says `—`, current docs disagree.** Codex docs describe per-project MCP scoping via `.codex/config.toml` for trusted projects. This row is unverified against a running binary, so the adapter follows the matrix and *skips* project-scoped servers with a warning rather than writing an unverified path or silently promoting them to global. Tracked as P3.17.
 
 ## Cursor (`cursor`)
 
