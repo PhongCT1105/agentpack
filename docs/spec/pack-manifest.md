@@ -120,6 +120,8 @@ mcp_servers:
   - name: supabase
     transport: http
     url: https://mcp.supabase.com/mcp
+    headers:                      # non-secret headers only (mirrors env)
+      X-Client-Info: agentpack
     credentials:
       - header: Authorization     # secret sent as a header
         format: "Bearer {value}"
@@ -129,7 +131,7 @@ mcp_servers:
 
 Rules:
 
-1. A conforming exporter MUST move any env var or header that matches secret heuristics (see [security.md](../security.md)) into `credentials`, discarding the value.
+1. A conforming exporter MUST move any env var or header that matches secret heuristics (see [security.md](../security.md)) into `credentials`, discarding the value. `env:` and `headers:` hold what remains — non-secret values only.
 2. A conforming installer MUST prompt for each credential (or read it from the local environment/keychain) and store it only in local tool config or OS secret storage — never back into the pack.
 3. `credentials[].env` / `credentials[].header` names the injection point; `description` and `obtain_url` tell the installer what to get and where.
 

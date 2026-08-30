@@ -11,3 +11,4 @@
 - 2026-08-30T11:20Z P1.9: agentpack scan command + internal/engine ScanAll — table grouped tool/kind/scope, --json; env/header/args/URL credential material masked in all output (pre-P2.2 hygiene); smoke-tested on real machine
 - 2026-08-30T11:40Z P1.10: scan warnings — dead stdio servers (unresolvable/missing command; relative paths exempt), .bak/.old/.orig/~ debris silently ignored, unknown MCP entry keys surfaced in both adapters
 - 2026-08-30T11:55Z P1.11: README — real scan usage + sample output generated from fixture trees, supported-tools table gains scan status, quick-start annotated (save/restore in progress). Phase 1 complete.
+- 2026-08-30T07:18Z P2.1: internal/packio manifest types matching spec v0.1 — strict DecodeManifest (unknown fields/version/kind/multi-doc rejected), deterministic EncodeManifest, round-trip + credential-value-rejection tests; spec gains non-secret headers: field
