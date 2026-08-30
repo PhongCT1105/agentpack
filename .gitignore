@@ -1,0 +1,17 @@
+# Binaries
+/agentpack
+/dist/
+*.exe
+
+# Go
+/vendor/
+coverage.out
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local scratch — never commit real machine exports
+/scratch/
+*.local.yaml

@@ -1,0 +1,69 @@
+# Security Model
+
+Security is a founding constraint of agentpack, not a feature: the product's core promise is *"share your setup without sharing your secrets."*
+
+## Threat model
+
+| # | Threat | Mitigation |
+|---|---|---|
+| 1 | **Publisher secret leakage** — a saved/published pack contains the author's API keys, tokens, or credentials | Schema-level exclusion + redaction + scanning (below) |
+| 2 | **Malicious packs** — a pack installs an MCP server or skill that exfiltrates data or runs hostile code on the installer's machine | Inspection-first UX, plan/confirm, provenance display (below) |
+| 3 | **Local config damage** — restore corrupts or clobbers a working setup | Plan/apply split, merge-not-clobber, automatic backups, dry-run |
+| 4 | **Credential mishandling on restore** — collected secrets end up somewhere they shouldn't | Secrets written only to local tool config / OS keychain; never to pack, lockfile, or logs |
+
+## Threat 1: publisher secret leakage (the critical one)
+
+Three independent layers, all mandatory:
+
+### Layer 1 — schema exclusion (structural)
+
+The pack manifest **has no field that can hold a secret value**. MCP env vars and headers are split: non-secret values go in `env:`, secrets become `credentials:` entries carrying only the *name* of what's required, a description, and where to obtain it. There is no place to put a token even on purpose.
+
+### Layer 2 — redaction on export (heuristic)
+
+During `save`, every value from scanned config passes the redactor. A value is treated as secret when **any** of:
+
+- its key matches secret-name patterns (`*token*`, `*key*`, `*secret*`, `*password*`, `*credential*`, `authorization`, case-insensitive) — with an allowlist for known false positives (`keybindings`, `keymap`, `hotkey`, …)
+- its value matches known credential formats: `ghp_/gho_/github_pat_`, `sk-`, `xoxb-`, AWS `AKIA…`, JWTs, PEM blocks, connection strings with passwords
+- its value exceeds an entropy threshold for its length (catches random API keys with unhelpful names)
+
+Redacted values become `credentials` requirements. Uncertain cases are surfaced to the user during save: *"SUPABASE_URL — keep as plain env, or mark as credential?"* Defaults favor redaction.
+
+### Layer 3 — whole-pack scan (defense in depth)
+
+After the pack directory is written, an independent scanner (gitleaks-style rules) runs over every file — including bundled skills, rules, and prompts, where users paste secrets more often than anyone admits. Findings **block** save/validate/publish. `agentpack validate` runs the same scan, so CI on a pack repo re-verifies on every commit.
+
+### Residual risk
+
+Heuristics cannot catch every secret (e.g. a password that looks like a word, pasted inside a bundled prompt). Documentation and the save-flow UI state clearly: *review your pack before publishing; validate runs in CI; treat a leaked pack like any credential leak — rotate.*
+
+## Threat 2: malicious packs
+
+Installing a pack can mean installing MCP servers and skills that **execute code with the installer's privileges**. agentpack cannot make arbitrary third-party code safe, and does not claim to. What it guarantees:
+
+- **Nothing installs silently.** Restore always shows the complete contents first: every skill, MCP server (with its exact `command`/`url`), rule, and permission change, plus every external service contacted and credential requested.
+- **Provenance is visible.** Referenced sources show their origin (npm package, git repo, marketplace id). Bundled content is shown as files the user can open.
+- **Credentials are per-server and explicit.** A pack requesting `GITHUB_TOKEN` for an MCP server named `github` whose command is an unrelated npm package is visible as exactly that.
+- **No elevation.** agentpack itself never requests sudo/admin and writes only to tool config locations and its own directories.
+
+Registry-era protections (signing, verified publishers, scanning of referenced sources, community reporting) are deferred with the registry itself — see [roadmap.md](roadmap.md).
+
+## Threat 3: local config damage
+
+- Restore is **plan → confirm → apply**; `--dry-run` stops at the plan.
+- Applies **merge** into existing config; conflicts are shown, and replace requires explicit choice.
+- Every file touched is first copied to `~/.agentpack/backups/<timestamp>/`, and the executor supports rollback of a failed apply.
+
+## Threat 4: credential mishandling on restore
+
+Resolution order for each declared credential: existing env var → OS keychain (macOS Keychain / libsecret / Windows Credential Manager) → interactive prompt (no echo).
+
+Rules:
+
+- Secrets are written **only** where the target tool needs them, preferring env-var indirection (`${GITHUB_TOKEN}`) where the tool supports expansion, falling back to the tool's own config file (matching the security posture the user already has).
+- Secrets never appear in the lockfile, logs, error messages, or telemetry (there is no telemetry).
+- Prompted secrets are offered for storage in the OS keychain so the next restore on that machine is non-interactive.
+
+## Reporting a vulnerability
+
+Open a private report via GitHub Security Advisories on this repository rather than a public issue.
