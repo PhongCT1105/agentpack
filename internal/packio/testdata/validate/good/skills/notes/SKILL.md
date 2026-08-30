@@ -1,0 +1,3 @@
+# Notes
+
+Take better notes.

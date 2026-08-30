@@ -22,5 +22,6 @@ directory, and restores packs onto other machines.`,
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newScanCmd(defaultAdapters))
 	cmd.AddCommand(newSaveCmd(defaultAdapters))
+	cmd.AddCommand(newValidateCmd())
 	return cmd
 }

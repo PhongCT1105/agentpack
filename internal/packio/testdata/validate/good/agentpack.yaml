@@ -1,0 +1,30 @@
+apiVersion: agentpack/v0
+kind: Pack
+metadata:
+  name: good-pack
+  description: minimal valid pack
+targets: [claude-code]
+components:
+  skills:
+    - name: notes
+      source:
+        bundled: skills/notes
+  commands:
+    - name: review
+      source:
+        bundled: prompts/review.md
+  mcp_servers:
+    - name: github
+      transport: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      credentials:
+        - env: GITHUB_TOKEN
+          description: GitHub personal access token
+  rules:
+    - name: conventions
+      source:
+        bundled: rules/conventions.md
+      scope: project
+      render:
+        claude-code: CLAUDE.md

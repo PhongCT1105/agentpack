@@ -32,7 +32,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [x] P2.3 `internal/secrets`: whole-pack scanner; adversarial fixture suite (release-blocking test tag)
 - [x] P2.4 inventory → pack conversion incl. env/credentials split and bundled-content copying
 - [x] P2.5 `agentpack save` command: component selection (`--all` first, interactive later), writes pack dir
-- [ ] P2.6 `agentpack validate` command: schema + name uniqueness + bundled paths + secret scan; nonzero exit for CI
+- [x] P2.6 `agentpack validate` command: schema + name uniqueness + bundled paths + secret scan; nonzero exit for CI
 - [ ] P2.7 uncertain-secret prompt flow (`SUPABASE_URL` problem) with redact-by-default
 - [ ] P2.8 docs: pack-authoring guide (`docs/guides/authoring.md`)
 

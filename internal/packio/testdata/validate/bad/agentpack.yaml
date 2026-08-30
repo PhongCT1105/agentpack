@@ -1,0 +1,63 @@
+apiVersion: agentpack/v0
+kind: Pack
+metadata:
+  name: Bad_Name
+targets: [claude-code, notatool]
+components:
+  skills:
+    - name: dup
+      source:
+        bundled: skills/dup
+    - name: dup
+      source:
+        plugin: x@marketplace
+        bundled: skills/dup2
+    - name: escape
+      source:
+        bundled: ../outside
+    - name: absolute
+      source:
+        bundled: /etc/hosts
+    - name: refless
+      source:
+        ref: vercel-labs/find-skills
+    - name: sourceless
+      source: {}
+    - name: ""
+      source:
+        plugin: y@marketplace
+    - name: afile
+      source:
+        bundled: skills/afile
+  mcp_servers:
+    - name: nostdio
+      transport: stdio
+    - name: nourl
+      transport: http
+    - name: pigeon
+      transport: carrier-pigeon
+      command: coo
+    - name: badcred
+      transport: stdio
+      command: x
+      credentials:
+        - env: A_TOKEN
+          header: Authorization
+        - description: names neither env nor header
+        - env: B_TOKEN
+          format: "Bearer {value}"
+    - name: badscope
+      transport: stdio
+      command: x
+      scope: universe
+      targets: [alsonotatool]
+  commands:
+    - name: dirprompt
+      source:
+        bundled: skills
+  rules:
+    - name: badrender
+      source:
+        bundled: rules/missing.md
+      render:
+        notatool: X.md

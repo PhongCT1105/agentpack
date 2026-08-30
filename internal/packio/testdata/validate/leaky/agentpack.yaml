@@ -1,0 +1,10 @@
+apiVersion: agentpack/v0
+kind: Pack
+metadata:
+  name: leaky-valid-pack
+targets: [claude-code]
+components:
+  commands:
+    - name: deploy
+      source:
+        bundled: prompts/deploy.md
