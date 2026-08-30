@@ -20,5 +20,6 @@ directory, and restores packs onto other machines.`,
 		},
 	}
 	cmd.AddCommand(newVersionCmd())
+	cmd.AddCommand(newScanCmd(defaultAdapters))
 	return cmd
 }
