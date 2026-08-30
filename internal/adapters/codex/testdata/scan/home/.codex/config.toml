@@ -1,0 +1,22 @@
+# Mixed file: portable MCP config lives alongside app settings.
+model = "gpt-5-codex"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[profiles.full_auto]
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+startup_timeout_sec = 20
+
+[mcp_servers.github.env]
+GITHUB_TOKEN = "ghp_FAKEFAKE"
+
+[mcp_servers.linear]
+url = "https://mcp.linear.app/mcp"
+
+[history]
+persistence = "save-all"

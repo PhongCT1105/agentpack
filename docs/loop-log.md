@@ -6,3 +6,4 @@
 - 2026-08-30T10:02Z P1.4: claudecode Scan skills global+project — ScanScope/Skill types in model, frontmatter description, symlink-following, warnings for broken dirs
 - 2026-08-30T10:15Z P1.5: claudecode Scan MCP servers — Transport/MCPServer in model, surgical mixed-file read of ~/.claude.json + .mcp.json, transport inference, warnings for local-scope/unknown/misshapen entries
 - 2026-08-30T10:30Z P1.6: claudecode Scan agents/commands/rules/settings — Agent/Command/Rule/Setting in model; personal files (CLAUDE.local.md, settings.local.json) scanned as components by design, save filters later; subdirs warn
+- 2026-08-30T10:45Z P1.7: codex adapter Detect() + Scan MCP from config.toml — BurntSushi/toml surgical read, global-only per matrix; noted bearer_token_env_var/http_headers for P3.5 in matrix doc

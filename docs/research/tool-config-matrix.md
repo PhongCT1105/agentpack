@@ -31,7 +31,7 @@ Paths are macOS/Linux; Windows equivalents to be added per adapter (`%USERPROFIL
 
 **Never port:** `~/.codex/auth.json` (and backups of it), caches, session state.
 
-**Notes:** `config.toml` is TOML, mixed settings + MCP; adapter merges `[mcp_servers.*]` tables surgically. Skills/agents have no Codex-native equivalent yet — pack components targeting only Codex skip them with a warning.
+**Notes:** `config.toml` is TOML, mixed settings + MCP; adapter merges `[mcp_servers.*]` tables surgically. Skills/agents have no Codex-native equivalent yet — pack components targeting only Codex skip them with a warning. Remote-server entries may also carry `bearer_token_env_var` / `http_headers` keys *(verify against current Codex)* — the scanner ignores them today; the `Plan()` work (P3.5) should model them as credential injection points.
 
 ## Cursor (`cursor`)
 
