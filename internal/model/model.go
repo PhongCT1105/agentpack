@@ -72,8 +72,8 @@ func (s Scope) Valid() bool {
 }
 
 // Component is the neutral representation of one portable piece of tool
-// config. Concrete types (skills, MCP servers, …) live alongside the adapters
-// that produce them and implement this interface.
+// config. Concrete types (Skill, MCPServer, …) live in this package — they
+// are shared by every adapter and by pack save/restore — see component.go.
 type Component interface {
 	Kind() Kind
 	Name() string

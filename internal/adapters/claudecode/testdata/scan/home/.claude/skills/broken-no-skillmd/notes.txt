@@ -1,0 +1,1 @@
+This directory deliberately lacks a SKILL.md — the scanner must warn, not model it.
