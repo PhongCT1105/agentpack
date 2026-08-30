@@ -73,6 +73,9 @@ func (a *Adapter) scanSkills(inv *model.Inventory, dir string, scope model.Scope
 	}
 
 	for _, e := range entries {
+		if mdscan.IsDebris(e.Name()) {
+			continue
+		}
 		skillDir := filepath.Join(dir, e.Name())
 		info, statErr := os.Stat(skillDir) // follows symlinks, unlike e.IsDir()
 		if statErr != nil {

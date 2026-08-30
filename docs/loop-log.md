@@ -9,3 +9,4 @@
 - 2026-08-30T10:45Z P1.7: codex adapter Detect() + Scan MCP from config.toml — BurntSushi/toml surgical read, global-only per matrix; noted bearer_token_env_var/http_headers for P3.5 in matrix doc
 - 2026-08-30T10:58Z P1.8: codex Scan AGENTS.md global+project + prompts; extracted shared internal/adapters/mdscan (frontmatter + flat *.md dir scan) used by both adapters; nested AGENTS.md intentionally not walked
 - 2026-08-30T11:20Z P1.9: agentpack scan command + internal/engine ScanAll — table grouped tool/kind/scope, --json; env/header/args/URL credential material masked in all output (pre-P2.2 hygiene); smoke-tested on real machine
+- 2026-08-30T11:40Z P1.10: scan warnings — dead stdio servers (unresolvable/missing command; relative paths exempt), .bak/.old/.orig/~ debris silently ignored, unknown MCP entry keys surfaced in both adapters

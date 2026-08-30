@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/PhongCT1105/agentpack/internal/adapters/mdscan"
@@ -87,6 +88,17 @@ func scanPrompts(inv *model.Inventory, dir string) error {
 		})
 }
 
+// commandMissing reports whether a stdio command fails to resolve. Relative
+// path commands are never flagged: their resolution depends on the tool's
+// working directory, not agentpack's.
+func (a *Adapter) commandMissing(cmd string) bool {
+	if strings.ContainsAny(cmd, `/\`) && !filepath.IsAbs(cmd) {
+		return false
+	}
+	_, err := a.lookPath(cmd)
+	return err != nil
+}
+
 // scanConfigTOML surgically reads the [mcp_servers.*] tables of
 // ~/.codex/config.toml — a mixed file whose other tables (model, profiles,
 // history, …) are settings handled elsewhere, never MCP config. A missing
@@ -119,6 +131,7 @@ func (a *Adapter) scanConfigTOML(inv *model.Inventory) error {
 	}
 	sort.Strings(names)
 
+	misshapen := map[string]bool{}
 	for _, name := range names {
 		var entry mcpEntry
 		if err := md.PrimitiveDecode(doc.MCPServers[name], &entry); err != nil {
@@ -126,6 +139,7 @@ func (a *Adapter) scanConfigTOML(inv *model.Inventory) error {
 				Path:    path,
 				Message: fmt.Sprintf("mcp_servers.%s has an unexpected shape; skipped", name),
 			})
+			misshapen[name] = true
 			continue
 		}
 
@@ -142,6 +156,15 @@ func (a *Adapter) scanConfigTOML(inv *model.Inventory) error {
 			})
 		}
 
+		// Dead-server check: a stdio server whose command does not resolve
+		// on this machine is likely stale config.
+		if transport == model.TransportStdio && a.commandMissing(entry.Command) {
+			inv.Warnings = append(inv.Warnings, model.Warning{
+				Path:    path,
+				Message: fmt.Sprintf("mcp_servers.%s command %q not found on this machine; server may be dead", name, entry.Command),
+			})
+		}
+
 		inv.Components = append(inv.Components, model.MCPServer{Spec: model.MCPServerSpec{
 			Name:      name,
 			Scope:     model.ScopeGlobal,
@@ -151,6 +174,27 @@ func (a *Adapter) scanConfigTOML(inv *model.Inventory) error {
 			Env:       entry.Env,
 			URL:       entry.URL,
 		}})
+	}
+
+	// Surface [mcp_servers.*] keys the neutral model does not carry (e.g.
+	// startup_timeout_sec): they would otherwise vanish silently on save.
+	// Keys of already-warned misshapen entries are skipped, as is the rest
+	// of the mixed file (settings tables are not MCP config).
+	unknownByServer := map[string][]string{}
+	for _, key := range md.Undecoded() {
+		if len(key) < 3 || key[0] != "mcp_servers" || misshapen[key[1]] {
+			continue
+		}
+		unknownByServer[key[1]] = append(unknownByServer[key[1]], strings.Join(key[2:], "."))
+	}
+	for _, name := range names {
+		if unknown := unknownByServer[name]; len(unknown) > 0 {
+			sort.Strings(unknown)
+			inv.Warnings = append(inv.Warnings, model.Warning{
+				Path:    path,
+				Message: fmt.Sprintf("mcp_servers.%s has keys agentpack does not model: %s", name, strings.Join(unknown, ", ")),
+			})
+		}
 	}
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/PhongCT1105/agentpack/internal/model"
 )
@@ -77,6 +78,15 @@ func (a *Adapter) scanMCPFile(inv *model.Inventory, path string, scope model.Sco
 			continue
 		}
 
+		// Surface keys the neutral model does not carry: they would
+		// otherwise vanish silently on a future save.
+		if unknown := unknownEntryKeys(servers[name]); len(unknown) > 0 {
+			inv.Warnings = append(inv.Warnings, model.Warning{
+				Path:    path,
+				Message: fmt.Sprintf("mcpServers.%s has keys agentpack does not model: %s", name, strings.Join(unknown, ", ")),
+			})
+		}
+
 		transport := model.Transport(entry.Type)
 		switch {
 		case entry.Type == "" && entry.Command != "":
@@ -95,6 +105,22 @@ func (a *Adapter) scanMCPFile(inv *model.Inventory, path string, scope model.Sco
 			})
 		}
 
+		// Dead-server check: a stdio server whose command does not resolve
+		// on this machine is likely stale config.
+		if transport == model.TransportStdio {
+			if entry.Command == "" {
+				inv.Warnings = append(inv.Warnings, model.Warning{
+					Path:    path,
+					Message: fmt.Sprintf("mcpServers.%s is stdio but has no command; server is dead", name),
+				})
+			} else if a.commandMissing(entry.Command) {
+				inv.Warnings = append(inv.Warnings, model.Warning{
+					Path:    path,
+					Message: fmt.Sprintf("mcpServers.%s command %q not found on this machine; server may be dead", name, entry.Command),
+				})
+			}
+		}
+
 		inv.Components = append(inv.Components, model.MCPServer{Spec: model.MCPServerSpec{
 			Name:      name,
 			Scope:     scope,
@@ -111,6 +137,42 @@ func (a *Adapter) scanMCPFile(inv *model.Inventory, path string, scope model.Sco
 		warnLocalScopeMCP(inv, path, top["projects"])
 	}
 	return nil
+}
+
+// commandMissing reports whether a stdio command fails to resolve. Relative
+// path commands (./scripts/mcp.sh) are never flagged: their resolution
+// depends on the tool's working directory, not agentpack's.
+func (a *Adapter) commandMissing(cmd string) bool {
+	if strings.ContainsAny(cmd, `/\`) && !filepath.IsAbs(cmd) {
+		return false
+	}
+	_, err := a.lookPath(cmd)
+	return err != nil
+}
+
+// knownEntryKeys is what mcpEntry models; anything else in a server object
+// is surfaced, not silently dropped.
+var knownEntryKeys = map[string]bool{
+	"type": true, "command": true, "args": true, "env": true,
+	"url": true, "headers": true,
+}
+
+// unknownEntryKeys lists a server object's keys the neutral model does not
+// carry, sorted for determinism. A non-object blob yields nil (the caller
+// already handled the shape error).
+func unknownEntryKeys(raw json.RawMessage) []string {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		return nil
+	}
+	var unknown []string
+	for k := range keys {
+		if !knownEntryKeys[k] {
+			unknown = append(unknown, k)
+		}
+	}
+	sort.Strings(unknown)
+	return unknown
 }
 
 // warnLocalScopeMCP reports per-project ("local scope") MCP servers nested

@@ -17,6 +17,9 @@ func newFixtureAdapter(t *testing.T) *Adapter {
 	}
 	a := New()
 	a.home = home
+	// Deterministic dead-server checks: fixture commands (npx, …) must not
+	// depend on what the CI machine has installed.
+	a.lookPath = lookPathHit
 	return a
 }
 
@@ -149,6 +152,7 @@ func TestScanEntryWithUnexpectedShape(t *testing.T) {
 	}
 	a := New()
 	a.home = home
+	a.lookPath = lookPathHit
 	inv, err := a.Scan(model.ScanScope{Global: true})
 	if err != nil {
 		t.Fatalf("Scan() error: %v", err)

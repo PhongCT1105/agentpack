@@ -17,6 +17,9 @@ func newFixtureAdapter(t *testing.T) *Adapter {
 	}
 	a := New()
 	a.home = home
+	// Deterministic dead-server checks: fixture commands (npx, …) must not
+	// depend on what the CI machine has installed.
+	a.lookPath = lookPathHit
 	return a
 }
 

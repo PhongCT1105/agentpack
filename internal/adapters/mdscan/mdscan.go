@@ -11,11 +11,23 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/PhongCT1105/agentpack/internal/model"
 	"gopkg.in/yaml.v3"
 )
+
+// debrisRe matches editor/backup debris that real config trees accumulate
+// (settings.json.bak, config.toml.backup, review.bak.md, foo~). Debris is
+// ignored silently — warning about every stale backup would drown the
+// warnings that matter (docs/research/tool-config-matrix.md, observation 5).
+var debrisRe = regexp.MustCompile(`(?i)((\.bak\d*|\.backup|\.old|\.orig)(\.|$)|~$)`)
+
+// IsDebris reports whether a file/dir name looks like backup debris.
+func IsDebris(name string) bool {
+	return debrisRe.MatchString(name)
+}
 
 // Frontmatter is the subset of a markdown file's leading YAML block that
 // scanning cares about.
@@ -61,6 +73,9 @@ func ScanFlatDir(inv *model.Inventory, dir string, useFrontmatterName bool,
 	}
 
 	for _, e := range entries {
+		if IsDebris(e.Name()) {
+			continue
+		}
 		path := filepath.Join(dir, e.Name())
 		info, statErr := os.Stat(path) // follow symlinks
 		if statErr != nil {
