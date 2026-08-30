@@ -1,0 +1,7 @@
+---
+description: Guardrails that apply to every request
+alwaysApply: true
+---
+
+- Never run destructive shell commands without asking first.
+- Do not edit files under `vendor/` or `dist/`.

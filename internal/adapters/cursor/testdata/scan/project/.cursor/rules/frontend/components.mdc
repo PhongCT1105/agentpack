@@ -1,0 +1,8 @@
+---
+description: Component conventions for the web app
+globs: ["apps/web/**/*.tsx"]
+alwaysApply: false
+---
+
+- One component per file; co-locate its stories and tests.
+- No default exports.

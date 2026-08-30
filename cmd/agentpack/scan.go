@@ -14,6 +14,8 @@ import (
 
 	"github.com/PhongCT1105/agentpack/internal/adapters/claudecode"
 	"github.com/PhongCT1105/agentpack/internal/adapters/codex"
+	"github.com/PhongCT1105/agentpack/internal/adapters/cursor"
+	"github.com/PhongCT1105/agentpack/internal/adapters/gemini"
 	"github.com/PhongCT1105/agentpack/internal/engine"
 	"github.com/PhongCT1105/agentpack/internal/model"
 )
@@ -25,7 +27,7 @@ import (
 const masked = "***"
 
 func defaultAdapters() []engine.Adapter {
-	return []engine.Adapter{claudecode.New(), codex.New()}
+	return []engine.Adapter{claudecode.New(), codex.New(), cursor.New(), gemini.New()}
 }
 
 func newScanCmd(adapters func() []engine.Adapter) *cobra.Command {

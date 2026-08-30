@@ -1,0 +1,7 @@
+{
+  "snapshot": "POPULATED_FROM_SETTINGS",
+  "install": "pnpm install",
+  "terminals": [
+    { "name": "dev", "command": "pnpm dev" }
+  ]
+}

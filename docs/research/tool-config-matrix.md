@@ -41,9 +41,21 @@ Paths are macOS/Linux; Windows equivalents to be added per adapter (`%USERPROFIL
 | Rules / instructions | User Rules live in app-internal storage (settings DB) — **not portable in v1**; documented limitation | `.cursor/rules/*.mdc` (frontmatter: `description`, `globs`, `alwaysApply`); legacy `.cursorrules` (read, but export to `.mdc`) |
 | Commands / prompts | — | `.cursor/commands/*.md` *(verify)* |
 
+| Skills | `~/.cursor/skills/<name>/SKILL.md` | `.cursor/skills/<name>/SKILL.md` |
+
 **Never port:** app-internal auth/session storage.
 
 **Notes:** Cursor is the clearest case for the `render:` mapping in the manifest — a neutral rule renders to `.mdc` with generated frontmatter.
+
+**Confirmed while building the adapter:**
+
+- **`globs:` is not valid YAML as Cursor writes it.** Cursor's own rule editor emits `globs: **/*.ts,*.tsx` unquoted, which a strict YAML parser reads as an alias and rejects — so a naive parser reports nearly every auto-attached rule as malformed. The adapter pre-quotes that line and accepts the list, bare-comma, single-unquoted, quoted and CRLF forms.
+- **Detect needs two signals.** The `cursor` shell command is opt-in on macOS, so a configured machine often has no binary on PATH; `~/.cursor` existing is the other half.
+- Remote MCP entries can carry an OAuth `auth` block (`CLIENT_ID`, `CLIENT_SECRET`, `scopes`). Not modeled yet, and a real credential-injection point for `Plan()`.
+- `.cursor/commands/*.md` is confirmed for **project** scope. Cursor's UI also refers to a global command library, but no doc names its path, so the global side is unimplemented and surfaces as an unmodeled-entry warning rather than vanishing.
+- Cursor supports rule **folders** and nested `.cursor/rules` in subdirectories; the adapter models the flat top level and warns about the rest.
+- Cursor also reads root and nested **`AGENTS.md`**, the same file the Codex adapter models. The Cursor adapter deliberately does *not* scan it — two adapters modeling one file would bundle the same content twice. Deduplicating a shared rule into one component with a multi-tool `render:` map is P3.14.
+- `.cursorrules` is legacy: current Cursor docs no longer mention it. Still read, with a warning pointing at `.cursor/rules/*.mdc`.
 
 ## Gemini CLI (`gemini-cli`)
 

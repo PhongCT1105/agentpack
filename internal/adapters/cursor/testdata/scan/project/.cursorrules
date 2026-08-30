@@ -1,0 +1,7 @@
+# Legacy project rules
+
+Written before Cursor moved to `.cursor/rules/*.mdc`. Cursor still reads it,
+so a scan models it and warns that a port has a conversion to make.
+
+- This repo uses pnpm; never invoke npm directly.
+- Run `make check` before proposing a commit.

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "internal-docs": {
+      "type": "http",
+      "url": "https://docs.internal.example.com/mcp",
+      "headers": {
+        "X-Api-Key": "${INTERNAL_DOCS_KEY}"
+      }
+    }
+  }
+}

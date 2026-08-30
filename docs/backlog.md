@@ -49,7 +49,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [x] P3.3 credential resolver: env → keychain (go-keyring) → prompt; env-expansion injection where supported
 - [ ] P3.4 claude-code adapter `Plan()`: skills, MCP (merge into `.mcp.json`/`~/.claude.json`), agents, commands, rules, settings
 - [ ] P3.5 codex adapter `Plan()`: MCP into `config.toml` tables, AGENTS.md, prompts
-- [ ] P3.6 cursor adapter: Detect/Scan/Plan (mcp.json, `.cursor/rules/*.mdc` with `render:`) `[indep]`
+- [~] P3.6 cursor adapter: Detect+Scan done (mcp.json both scopes, `.mdc` rules incl. the unquoted-globs gotcha, legacy `.cursorrules`, commands); `Plan()` half still open `[indep]`
 - [~] P3.7 gemini-cli adapter: Detect+Scan done (settings.json two layouts, GEMINI.md, extensions inventoried); `Plan()` half still open, tracked in P3.5b `[indep]`
 - [ ] P3.8 lockfile write/read; re-apply idempotence test
 - [ ] P3.9 round-trip integration test: scan→save→restore→re-scan equality (CI, all 3 OSes)
@@ -59,6 +59,10 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [ ] P3.12 model tool extensions (Gemini extensions, and the equivalent elsewhere): needs an extension kind in `internal/model` and a section in `docs/spec/pack-manifest.md`. Until then extensions are inventoried as warnings and never published, so `save` cannot misrepresent an extension's MCP servers as user configuration.
 
 - [ ] P3.13 decide whether codex's `config.toml` needs a surgical (comment-preserving) editor. The merge executor re-encodes the document, so a hand-commented config loses its comments on restore. Data is safe and the pre-write backup is the mitigation, but a user's annotated config is worth more than the round-trip convenience.
+
+- [ ] P3.14 deduplicate a rule file that several tools read into ONE component with a multi-tool `render:` map. `AGENTS.md` is read by both Codex and Cursor; scanning it per-adapter would bundle identical content twice under deduplicated names. The manifest's `render:` field already exists for exactly this, so the fix belongs in conversion, not in the adapters. Cursor's AGENTS.md support stays unimplemented until this lands.
+- [ ] P3.15 model Cursor skills (`~/.cursor/skills/<name>/SKILL.md`, `.cursor/skills/`) — same layout as Claude Code skills, so it is a small addition to the cursor adapter.
+- [ ] P3.16 model the OAuth `auth` block on remote MCP servers (`CLIENT_ID`/`CLIENT_SECRET`/`scopes`, seen in Cursor). It is a credential-injection point, so it needs a `credentials:` representation in the manifest, not a plain passthrough.
 
 ## Phase 4 — sharing
 

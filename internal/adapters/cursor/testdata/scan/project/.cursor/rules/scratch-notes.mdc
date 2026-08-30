@@ -1,0 +1,5 @@
+# Scratch notes
+
+A rule file with no frontmatter block. Cursor keeps it as a manual rule the
+author invokes with `@scratch-notes`, so nothing about it is unmodeled and
+the scanner stays quiet.

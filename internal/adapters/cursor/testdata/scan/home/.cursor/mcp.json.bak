@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "old-server": {
+      "command": "retired-mcp",
+      "env": {
+        "OLD_TOKEN": "FAKE-EXPIRED-TOKEN"
+      }
+    }
+  }
+}

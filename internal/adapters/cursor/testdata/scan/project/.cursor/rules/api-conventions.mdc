@@ -1,0 +1,9 @@
+---
+description: REST conventions for the public API
+globs: ["src/api/**/*.ts"]
+alwaysApply: false
+---
+
+- Version every endpoint under `/v1`; never break a shipped response shape.
+- Validate request bodies at the edge, not in handlers.
+- Error responses use the shared `problem+json` helper.

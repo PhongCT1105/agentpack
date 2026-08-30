@@ -1,0 +1,8 @@
+---
+description: How tests are written in this repo
+globs: *_test.go, src/**/*.spec.ts
+alwaysApply: false
+---
+
+- Table tests over per-case functions; name every case.
+- Fixtures live under `testdata/`, never inline in the test body.
