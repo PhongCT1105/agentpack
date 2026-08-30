@@ -29,11 +29,26 @@ During `save`, every value from scanned config passes the redactor. A value is t
 
 Redacted values become `credentials` requirements. Uncertain cases are surfaced to the user during save: *"SUPABASE_URL — keep as plain env, or mark as credential?"* Defaults favor redaction.
 
+### Layer 2.5 — bundling hygiene (what never enters a pack)
+
+Redaction cleans *config values*. It says nothing about *files copied wholesale* into a pack, and that turned out to be the larger hole: bundling one real third-party skill copied 1.1 GB — including 726 MB of `node_modules`, a nested `.git`, and the skill's own test suite.
+
+Two excluded categories are security fixes, not hygiene:
+
+- **`.git/`** — `config` can hold a remote URL with an embedded token (`https://user:token@host/repo`), and the object store holds everything ever committed.
+- **dotenv and credential files** — `.env`, `.env.local` and friends *are* credential files, as are `.npmrc` (registry auth), `.netrc` and `.pypirc`. `.env.example` and `.env.sample` are kept: they document required variables without carrying values.
+
+The rest are excluded because they are reinstallable, regenerable, or not part of the portable environment: vendored dependencies, build output, caches, and the component's own test suite and CI config. Beyond size, this keeps a pack **inspectable** — a human is expected to read a pack before installing it, which is impossible when it carries thousands of vendored files.
+
+Exclusions are always reported as warnings, never silent, so what landed in the pack is never mistaken for a byte-for-byte copy of the machine.
+
 ### Layer 3 — whole-pack scan (defense in depth)
 
-After the pack directory is written, an independent scanner (gitleaks-style rules) runs over every file — including bundled skills, rules, and prompts, where users paste secrets more often than anyone admits. Findings **block** save/validate/publish by default. `agentpack validate` runs the same scan, so CI on a pack repo re-verifies on every commit.
+After the pack directory is written, an independent scanner (gitleaks-style rules) runs over every file — including bundled skills, rules, and prompts, where users paste secrets more often than anyone admits. `agentpack validate` runs the same scan, so CI on a pack repo re-verifies on every commit.
 
-Not every finding carries the same confidence. A match against a known credential format (`ghp_…`, a PEM block, a JWT, an AWS key, and the like) is near-certain and **always blocks**, regardless of where it appears. A match from the weaker assignment or entropy heuristics is *reviewable* when it occurs in bundled source, docs, or a test-fixture path — these are exactly where `KEY=value` and high-entropy shapes turn up without being real config (a JSX prop, a prose example, seeded fixture data), and dogfooding found them dominating real-world `save` runs (docs/backlog.md P2.9). A reviewable finding still blocks by default — the fail-safe default is unchanged — but after a human inspects it and confirms it is not a secret, it can be waived with a `.agentpack-allow` entry in the pack (`<path>[:<line>]`, committed and reviewed like any other content) or a one-off `--allow-finding` flag. The allowlist can never waive a high-confidence format match; there is no flag or file entry that silences one.
+Not every finding carries the same confidence. A match against a known credential format (`ghp_…`, a PEM block, a JWT, an AWS key, and the like) is near-certain and **always blocks**, regardless of where it appears. A match from the weaker assignment or entropy heuristics is *reviewable* when it occurs in bundled source, docs, or a test-fixture path — these are exactly where `KEY=value` and high-entropy shapes turn up without being real config (a JSX prop, a prose example, seeded fixture data), and dogfooding found them dominating real-world `save` runs (docs/backlog.md P2.9). A reviewable finding is **reported and summarized by file, not fatal**. Blocking on them was tried and abandoned: after bundling hygiene removed the vendored noise, a single real machine still produced hundreds of them, and a gate that fails on every real setup is a gate people switch off — a strictly worse outcome than one that reports honestly. `--strict` promotes reviewable findings to blocking, which is what CI over a curated pack should use. A human who has inspected one can waive it permanently with a `.agentpack-allow` entry (`<path>[:<line>]`, committed and reviewed like any other content) or a one-off `--allow-finding` flag.
+
+The allowlist can never waive a high-confidence format match; there is no flag or file entry that silences one. That is deliberate and it has a cost: a component whose *source* legitimately contains credential patterns — a secret-redaction library, for instance — cannot be bundled at all. The answer there is to fix the file or leave that component out of the pack, never to weaken the guarantee.
 
 ### Seeded fixtures
 
