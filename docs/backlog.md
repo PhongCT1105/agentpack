@@ -34,7 +34,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [x] P2.5 `agentpack save` command: component selection (`--all` first, interactive later), writes pack dir
 - [x] P2.6 `agentpack validate` command: schema + name uniqueness + bundled paths + secret scan; nonzero exit for CI
 - [x] P2.7 uncertain-secret prompt flow (`SUPABASE_URL` problem) with redact-by-default
-- [ ] P2.8 docs: pack-authoring guide (`docs/guides/authoring.md`)
+- [x] P2.8 docs: pack-authoring guide (`docs/guides/authoring.md`)
 
 ## Phase 3 — restore
 

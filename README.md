@@ -17,7 +17,7 @@ scan → understand → save → restore → share
 agentpack scan
 
 # Save it as a portable pack (secrets stripped, credentials declared)
-agentpack save my-setup
+agentpack save --all my-setup
 
 # On a new machine: restore it, providing your own credentials
 agentpack restore my-setup
@@ -26,7 +26,7 @@ agentpack restore my-setup
 agentpack restore github.com/someone/fullstack-pack
 ```
 
-*`scan` works today; `save` and `restore` are in progress — see [Status](#status).*
+*`scan`, `save`, and `validate` work today; `restore` is in progress — see [Status](#status).*
 
 ## Try it today: `agentpack scan`
 
@@ -76,7 +76,20 @@ codex 0.45.0
 
 Warnings flag what scan saw but could not model — dead MCP servers, unknown config keys, unscannable files — so nothing vanishes silently.
 
-`save`, `validate`, and `restore` are the next phases of the [backlog](docs/backlog.md); the quick-start above shows where the CLI is heading.
+`save` and `validate` work today:
+
+```bash
+agentpack save --all my-setup          # export a secrets-free pack
+agentpack save --all --review-uncertain my-setup   # decide borderline values yourself
+agentpack validate my-setup            # schema + secret scan; nonzero exit for CI
+```
+
+Saving redacts every secret into a credential *requirement* (the value is
+never stored), skips personal files (`CLAUDE.local.md`,
+`settings.local.json`), and re-scans the written pack as a final gate —
+a suspected secret anywhere, including inside bundled skill content,
+blocks the save. See the [pack-authoring guide](docs/guides/authoring.md).
+`restore` is the next phase of the [backlog](docs/backlog.md).
 
 ## Why
 
@@ -128,12 +141,13 @@ The neutral component model and per-tool adapters are described in [docs/archite
 
 ## Status
 
-**Pre-alpha.** Phase 1 (scan) is implemented: `agentpack scan` works today for Claude Code and Codex CLI with fixture-tested adapters and cross-platform-minded path handling. Phase 2 (save + validate, including the secrets redactor) is next. Built in the open, task by task — see [docs/roadmap.md](docs/roadmap.md) and [docs/backlog.md](docs/backlog.md).
+**Pre-alpha.** Phases 1 and 2 are implemented: `agentpack scan` works for Claude Code and Codex CLI, and `agentpack save` / `agentpack validate` produce and check secrets-free packs — three-layer secret protection (schema exclusion, redaction with interactive review of uncertain values, release-blocking whole-pack scanning) is in place and fixture-tested. Phase 3 (restore) is next. Built in the open, task by task — see [docs/roadmap.md](docs/roadmap.md) and [docs/backlog.md](docs/backlog.md).
 
 ## Documentation
 
 - [Vision](docs/vision.md) — the problem and the larger goal
 - [Pack manifest spec (draft v0.1)](docs/spec/pack-manifest.md) — the portable setup format
+- [Pack-authoring guide](docs/guides/authoring.md) — creating packs by export or by hand
 - [Architecture](docs/architecture.md) — CLI design, adapters, component model
 - [Security](docs/security.md) — threat model and credential handling
 - [Tool config matrix](docs/research/tool-config-matrix.md) — where every tool keeps its config
