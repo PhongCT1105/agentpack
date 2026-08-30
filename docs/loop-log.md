@@ -12,3 +12,4 @@
 - 2026-08-30T11:40Z P1.10: scan warnings — dead stdio servers (unresolvable/missing command; relative paths exempt), .bak/.old/.orig/~ debris silently ignored, unknown MCP entry keys surfaced in both adapters
 - 2026-08-30T11:55Z P1.11: README — real scan usage + sample output generated from fixture trees, supported-tools table gains scan status, quick-start annotated (save/restore in progress). Phase 1 complete.
 - 2026-08-30T07:18Z P2.1: internal/packio manifest types matching spec v0.1 — strict DecodeManifest (unknown fields/version/kind/multi-doc rejected), deterministic EncodeManifest, round-trip + credential-value-rejection tests; spec gains non-secret headers: field
+- 2026-08-30T07:36Z P2.2: internal/secrets redactor — Classify(key,value) → Plain/Uncertain/Secret with rule ids; format regexes, segment-based key matching, charset-normalized entropy; URL and path values cap at Uncertain (SUPABASE_URL problem); .gitleaks.toml allowlists FAKE-seeded fixtures

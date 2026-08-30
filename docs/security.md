@@ -23,7 +23,7 @@ The pack manifest **has no field that can hold a secret value**. MCP env vars an
 
 During `save`, every value from scanned config passes the redactor. A value is treated as secret when **any** of:
 
-- its key matches secret-name patterns (`*token*`, `*key*`, `*secret*`, `*password*`, `*credential*`, `authorization`, case-insensitive) — with an allowlist for known false positives (`keybindings`, `keymap`, `hotkey`, …)
+- its key matches secret-name patterns, evaluated on name *segments* (split on `_`/`-`/camelCase, case-insensitive): `key`/`apikey` must equal a whole segment, while `token`, `secret`, `password`, `passwd`, `passphrase`, `credential`, `authorization` may also end one (`clientSecret`, `api_token`) — so `keybindings`, `keymap`, `hotkey`, `monkey`, `tokenizer` cannot false-positive
 - its value matches known credential formats: `ghp_/gho_/github_pat_`, `sk-`, `xoxb-`, AWS `AKIA…`, JWTs, PEM blocks, connection strings with passwords
 - its value exceeds an entropy threshold for its length (catches random API keys with unhelpful names)
 
@@ -32,6 +32,10 @@ Redacted values become `credentials` requirements. Uncertain cases are surfaced 
 ### Layer 3 — whole-pack scan (defense in depth)
 
 After the pack directory is written, an independent scanner (gitleaks-style rules) runs over every file — including bundled skills, rules, and prompts, where users paste secrets more often than anyone admits. Findings **block** save/validate/publish. `agentpack validate` runs the same scan, so CI on a pack repo re-verifies on every commit.
+
+### Seeded fixtures
+
+Adapter fixtures and redactor tests seed fake secrets in realistic formats (`ghp_…`, `sk-…`, `AKIA…`, JWTs) so detection is tested against real token shapes. Every seeded fake embeds the string `FAKE`; the repository's `.gitleaks.toml` allowlists exactly that marker, so any secret-shaped string *without* it is a genuine finding and blocks the commit.
 
 ### Residual risk
 

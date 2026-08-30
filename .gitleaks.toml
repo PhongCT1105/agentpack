@@ -1,0 +1,13 @@
+# Extends the default gitleaks rules. Fixtures and tests in this repository
+# seed fake secrets in realistic formats (docs/security.md) so the redactor
+# and pack scanner can be tested against real token shapes; every seeded
+# fake embeds the string FAKE. Anything gitleaks flags that does NOT embed
+# FAKE is a genuine finding and must block the commit.
+title = "agentpack gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Seeded FAKE secrets in fixtures and table tests"
+regexes = ['''FAKE''']
