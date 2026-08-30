@@ -324,9 +324,9 @@ func (c *converter) warnf(path, format string, args ...any) {
 // resolveName slugs a scanned component name and makes it unique within
 // its kind, preferring readable disambiguators (scope, tool) over numbers.
 func (c *converter) resolveName(kind model.Kind, raw string, scope model.Scope, tool model.ToolID) string {
-	base := slugify(raw)
+	base := Slugify(raw)
 	if base == "" {
-		base = slugify(string(kind))
+		base = Slugify(string(kind))
 	}
 	taken := c.names[kind]
 	if taken == nil {
@@ -337,9 +337,9 @@ func (c *converter) resolveName(kind model.Kind, raw string, scope model.Scope, 
 	if scope != "" {
 		candidates = append(candidates, base+"-"+string(scope))
 	}
-	candidates = append(candidates, base+"-"+slugify(string(tool)))
+	candidates = append(candidates, base+"-"+Slugify(string(tool)))
 	if scope != "" {
-		candidates = append(candidates, base+"-"+slugify(string(tool))+"-"+string(scope))
+		candidates = append(candidates, base+"-"+Slugify(string(tool))+"-"+string(scope))
 	}
 	for _, cand := range candidates {
 		if !taken[cand] {
@@ -358,7 +358,7 @@ func (c *converter) resolveName(kind model.Kind, raw string, scope model.Scope, 
 
 var slugSepRe = regexp.MustCompile(`[^a-z0-9]+`)
 
-func slugify(s string) string {
+func Slugify(s string) string {
 	s = slugSepRe.ReplaceAllString(strings.ToLower(s), "-")
 	return strings.Trim(s, "-")
 }

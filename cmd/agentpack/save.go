@@ -1,0 +1,165 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/PhongCT1105/agentpack/internal/engine"
+	"github.com/PhongCT1105/agentpack/internal/model"
+	"github.com/PhongCT1105/agentpack/internal/packio"
+	"github.com/PhongCT1105/agentpack/internal/secrets"
+)
+
+func newSaveCmd(adapters func() []engine.Adapter) *cobra.Command {
+	var (
+		all        bool
+		name       string
+		projectDir string
+	)
+	cmd := &cobra.Command{
+		Use:   "save <dir>",
+		Short: "Save the scanned environment as a secrets-free pack directory",
+		Long: `Save scans the installed tools and writes their portable components into
+a pack directory (docs/spec/pack-manifest.md).
+
+Every env var, header, and settings value passes the secrets redactor:
+secret values become credential requirements — the pack stores what is
+needed, never the value. After writing, an independent whole-pack scan
+re-checks every file; findings remove the pack and fail the save.
+
+Personal files (CLAUDE.local.md, settings.local.json) are never saved.
+Uncertain values are redacted by default; interactive review arrives in a
+later phase.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !all {
+				return errors.New("interactive component selection is not implemented yet; pass --all to save every portable component")
+			}
+			dir := args[0]
+			packName := name
+			if packName == "" {
+				abs, err := filepath.Abs(dir)
+				if err != nil {
+					return err
+				}
+				packName = packio.Slugify(filepath.Base(abs))
+				if packName == "" {
+					return fmt.Errorf("cannot derive a pack name from directory %q; pass --name", dir)
+				}
+			}
+			return runSaveAll(cmd, adapters(), dir, packName, projectDir)
+		},
+	}
+	cmd.Flags().BoolVar(&all, "all", false, "save every portable component without prompting")
+	cmd.Flags().StringVar(&name, "name", "", "pack name (default: derived from the target directory)")
+	cmd.Flags().StringVar(&projectDir, "project", defaultProjectDir(),
+		"project directory to scan for project-scoped components (empty to skip)")
+	return cmd
+}
+
+func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projectDir string) error {
+	out := cmd.OutOrStdout()
+	scope := model.ScanScope{Global: true, ProjectDir: projectDir}
+	results := engine.ScanAll(adapters, scope)
+
+	var invs []model.Inventory
+	var skippedPersonal []string
+	var scanErrs []string
+	for _, res := range results {
+		if res.Err != nil {
+			scanErrs = append(scanErrs, fmt.Sprintf("%s: %v", res.Tool, res.Err))
+		}
+		if !res.Installed {
+			continue
+		}
+		inv, skipped := filterPersonal(res.Inventory)
+		skippedPersonal = append(skippedPersonal, skipped...)
+		fmt.Fprintf(out, "scanned %s: %d component(s)\n", res.Tool, len(inv.Components))
+		invs = append(invs, inv)
+	}
+	// A failed scan means an incomplete inventory; a silently partial pack
+	// is worse than no pack.
+	if len(scanErrs) > 0 {
+		return fmt.Errorf("refusing to save a partial pack, scanning failed:\n  %s", strings.Join(scanErrs, "\n  "))
+	}
+	if len(skippedPersonal) > 0 {
+		fmt.Fprintf(out, "skipped personal component(s), never saved: %s\n", strings.Join(skippedPersonal, ", "))
+	}
+	total := 0
+	for _, inv := range invs {
+		total += len(inv.Components)
+	}
+	if total == 0 {
+		if n := len(skippedPersonal); n > 0 {
+			return fmt.Errorf("no portable components to save (%d personal component(s) were filtered out)", n)
+		}
+		return errors.New("no portable components found on this machine; nothing to save")
+	}
+
+	res, err := packio.Convert(invs, packio.ConvertOptions{Name: name})
+	if err != nil {
+		return err
+	}
+
+	if len(res.Redactions) > 0 {
+		fmt.Fprintln(out, "redacted (values are never stored in a pack):")
+		uncertain := false
+		for _, r := range res.Redactions {
+			fmt.Fprintf(out, "  %s: %s — %s\n", r.Component, r.Key, r.Verdict.Reason)
+			if r.Verdict.Level == secrets.Uncertain {
+				uncertain = true
+			}
+		}
+		if uncertain {
+			fmt.Fprintln(out, "  (uncertain values were redacted by default; interactive review arrives in a later phase)")
+		}
+	}
+	for _, w := range res.Warnings {
+		fmt.Fprintf(out, "warning: %s\n", w)
+	}
+
+	findings, err := packio.WritePack(dir, res)
+	if len(findings) > 0 {
+		fmt.Fprintln(cmd.ErrOrStderr(), "suspected secrets in pack content:")
+		for _, f := range findings {
+			fmt.Fprintf(cmd.ErrOrStderr(), "  %s:%d %s %s\n", f.Path, f.Line, f.Rule, f.Excerpt)
+		}
+		fmt.Fprintln(cmd.ErrOrStderr(), "fix the source files above and retry; nothing was saved")
+	}
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(out, "wrote pack %q (%d component(s)) to %s\n", name, countComponents(res.Manifest), dir)
+	return nil
+}
+
+// filterPersonal removes components that live in personal, gitignored
+// files — they are the user's private overlay, never pack content. The
+// ".local." naming convention exists only for rule and settings files
+// (CLAUDE.local.md, settings.local.json); other kinds keep their names.
+func filterPersonal(inv model.Inventory) (model.Inventory, []string) {
+	var skipped []string
+	kept := inv
+	kept.Components = nil
+	for _, c := range inv.Components {
+		personal := (c.Kind() == model.KindRule || c.Kind() == model.KindSetting) &&
+			strings.Contains(strings.ToLower(c.Name()), ".local.")
+		if personal {
+			skipped = append(skipped, fmt.Sprintf("%s/%s", c.Kind(), c.Name()))
+			continue
+		}
+		kept.Components = append(kept.Components, c)
+	}
+	return kept, skipped
+}
+
+func countComponents(m *packio.Manifest) int {
+	return len(m.Components.Skills) + len(m.Components.MCPServers) +
+		len(m.Components.Agents) + len(m.Components.Rules) +
+		len(m.Components.Commands) + len(m.Components.Settings)
+}
