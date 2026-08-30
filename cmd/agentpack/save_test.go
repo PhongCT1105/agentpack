@@ -77,10 +77,16 @@ func saveFixtures(t *testing.T, leaky bool) func() []engine.Adapter {
 
 func runSave(t *testing.T, adapters func() []engine.Adapter, args ...string) (string, error) {
 	t.Helper()
+	return runSaveWithInput(t, adapters, "", args...)
+}
+
+func runSaveWithInput(t *testing.T, adapters func() []engine.Adapter, stdin string, args ...string) (string, error) {
+	t.Helper()
 	cmd := newSaveCmd(adapters)
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
+	cmd.SetIn(strings.NewReader(stdin))
 	cmd.SetArgs(args)
 	err := cmd.Execute()
 	return out.String(), err
@@ -188,6 +194,140 @@ func TestSaveFailsWhenNothingInstalled(t *testing.T) {
 	_, err := runSave(t, adapters, "--all", dir)
 	if err == nil || !strings.Contains(err.Error(), "no portable components") {
 		t.Errorf("save with nothing installed: err = %v, want 'no portable components' error", err)
+	}
+}
+
+// uncertainAdapters returns an inventory whose MCP server carries one
+// clearly-secret env var and one uncertain one (the SUPABASE_URL problem).
+func uncertainAdapters() func() []engine.Adapter {
+	inv := model.Inventory{
+		Tool: model.ToolClaudeCode,
+		Components: []model.Component{
+			model.MCPServer{Spec: model.MCPServerSpec{
+				Name: "supabase", Scope: model.ScopeGlobal,
+				Transport: model.TransportStdio, Command: "npx",
+				Env: map[string]string{
+					"SUPABASE_URL":   "https://FAKE0q7pz2mk9vlt4wyb.supabase.co",
+					"SUPABASE_TOKEN": "FAKEq7PzX2mK9vLtR4wYbN8cJ5hD3fG6",
+				},
+			}},
+		},
+	}
+	return func() []engine.Adapter {
+		return []engine.Adapter{stubAdapter{id: model.ToolClaudeCode, installed: true, inv: inv}}
+	}
+}
+
+func savedManifest(t *testing.T, dir string) *packio.Manifest {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, packio.ManifestFilename))
+	if err != nil {
+		t.Fatalf("manifest missing: %v", err)
+	}
+	m, err := packio.DecodeManifest(data)
+	if err != nil {
+		t.Fatalf("manifest does not decode: %v", err)
+	}
+	return m
+}
+
+func TestSaveReviewUncertainKeepAnswer(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "pack")
+	out, err := runSaveWithInput(t, uncertainAdapters(), "n\n",
+		"--all", "--name", "u-pack", "--review-uncertain", dir)
+	if err != nil {
+		t.Fatalf("save error: %v\noutput:\n%s", err, out)
+	}
+	m := savedManifest(t, dir)
+	srv := m.Components.MCPServers[0]
+	if srv.Env["SUPABASE_URL"] == "" {
+		t.Errorf("answered n (keep); SUPABASE_URL missing from env: %+v", srv)
+	}
+	// The clearly-secret value must never be prompted for and always redacts.
+	if len(srv.Credentials) != 1 || srv.Credentials[0].Env != "SUPABASE_TOKEN" {
+		t.Errorf("credentials = %+v, want only SUPABASE_TOKEN", srv.Credentials)
+	}
+	if !strings.Contains(out, "SUPABASE_URL") {
+		t.Errorf("prompt did not mention the uncertain key:\n%s", out)
+	}
+	if strings.Contains(out, "FAKEq7PzX2mK9vLtR4wYbN8cJ5hD3fG6") {
+		t.Error("output shows the confirmed-secret value; only uncertain values may be displayed for review")
+	}
+}
+
+func TestSaveReviewUncertainDefaultIsRedact(t *testing.T) {
+	for name, stdin := range map[string]string{"empty answer": "\n", "eof": ""} {
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "pack")
+			out, err := runSaveWithInput(t, uncertainAdapters(), stdin,
+				"--all", "--name", "u-pack", "--review-uncertain", dir)
+			if err != nil {
+				t.Fatalf("save error: %v\noutput:\n%s", err, out)
+			}
+			srv := savedManifest(t, dir).Components.MCPServers[0]
+			if _, kept := srv.Env["SUPABASE_URL"]; kept {
+				t.Errorf("default answer must redact; SUPABASE_URL kept: %+v", srv)
+			}
+			if len(srv.Credentials) != 2 {
+				t.Errorf("credentials = %+v, want SUPABASE_TOKEN and SUPABASE_URL", srv.Credentials)
+			}
+		})
+	}
+}
+
+func TestSaveReviewUncertainInvalidAnswerReprompts(t *testing.T) {
+	// Two uncertain values, prompted in sorted key order. The first gets an
+	// invalid answer then "n" (keep); the second hits EOF (redact).
+	inv := model.Inventory{
+		Tool: model.ToolClaudeCode,
+		Components: []model.Component{
+			model.MCPServer{Spec: model.MCPServerSpec{
+				Name: "supabase", Scope: model.ScopeGlobal,
+				Transport: model.TransportStdio, Command: "npx",
+				Env: map[string]string{
+					"SUPA_A_URL": "https://FAKE0q7pz2mk9vlt4wyb.supabase.co",
+					"SUPA_B_URL": "https://FAKE0q7pz2mk9vlt4wyb.supabase.co",
+				},
+			}},
+		},
+	}
+	adapters := func() []engine.Adapter {
+		return []engine.Adapter{stubAdapter{id: model.ToolClaudeCode, installed: true, inv: inv}}
+	}
+	dir := filepath.Join(t.TempDir(), "pack")
+	out, err := runSaveWithInput(t, adapters, "bogus\nn\n",
+		"--all", "--name", "u-pack", "--review-uncertain", dir)
+	if err != nil {
+		t.Fatalf("save error: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "please answer") {
+		t.Errorf("invalid answer did not re-prompt:\n%s", out)
+	}
+	srv := savedManifest(t, dir).Components.MCPServers[0]
+	if srv.Env["SUPA_A_URL"] == "" {
+		t.Errorf("first value (answered n after re-prompt) not kept: %+v", srv)
+	}
+	if len(srv.Credentials) != 1 || srv.Credentials[0].Env != "SUPA_B_URL" {
+		t.Errorf("credentials = %+v, want only SUPA_B_URL (EOF default)", srv.Credentials)
+	}
+}
+
+func TestSaveWithoutReviewFlagRedactsAndPointsAtFlag(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "pack")
+	out, err := runSave(t, uncertainAdapters(), "--all", "--name", "u-pack", dir)
+	if err != nil {
+		t.Fatalf("save error: %v\noutput:\n%s", err, out)
+	}
+	srv := savedManifest(t, dir).Components.MCPServers[0]
+	if len(srv.Credentials) != 2 {
+		t.Errorf("credentials = %+v, want both redacted by default", srv.Credentials)
+	}
+	if !strings.Contains(out, "--review-uncertain") {
+		t.Errorf("output does not point at --review-uncertain:\n%s", out)
+	}
+	// Without review, the uncertain value must not be displayed.
+	if strings.Contains(out, "FAKE0q7pz2mk9vlt4wyb") {
+		t.Errorf("non-interactive output shows a value:\n%s", out)
 	}
 }
 

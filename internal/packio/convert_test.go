@@ -123,7 +123,10 @@ func TestConvertSplitsEnvAndCredentials(t *testing.T) {
 func TestConvertUncertainCallbackCanKeep(t *testing.T) {
 	opts := ConvertOptions{
 		Name: "test-pack",
-		TreatUncertainAsSecret: func(key, value string, v secrets.Verdict) bool {
+		TreatUncertainAsSecret: func(ref, key, value string, v secrets.Verdict) bool {
+			if ref != "mcp_server/github" {
+				return true
+			}
 			return key != "SUPABASE_URL" // keep this one as plain env
 		},
 	}

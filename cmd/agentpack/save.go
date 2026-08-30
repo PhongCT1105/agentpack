@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -16,9 +17,10 @@ import (
 
 func newSaveCmd(adapters func() []engine.Adapter) *cobra.Command {
 	var (
-		all        bool
-		name       string
-		projectDir string
+		all             bool
+		name            string
+		projectDir      string
+		reviewUncertain bool
 	)
 	cmd := &cobra.Command{
 		Use:   "save <dir>",
@@ -32,8 +34,9 @@ needed, never the value. After writing, an independent whole-pack scan
 re-checks every file; findings remove the pack and fail the save.
 
 Personal files (CLAUDE.local.md, settings.local.json) are never saved.
-Uncertain values are redacted by default; interactive review arrives in a
-later phase.`,
+Values the redactor is uncertain about (the SUPABASE_URL problem) are
+redacted by default; pass --review-uncertain to decide each one — the
+default answer still redacts, so an unattended run stays safe.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !all {
@@ -51,17 +54,19 @@ later phase.`,
 					return fmt.Errorf("cannot derive a pack name from directory %q; pass --name", dir)
 				}
 			}
-			return runSaveAll(cmd, adapters(), dir, packName, projectDir)
+			return runSaveAll(cmd, adapters(), dir, packName, projectDir, reviewUncertain)
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "save every portable component without prompting")
 	cmd.Flags().StringVar(&name, "name", "", "pack name (default: derived from the target directory)")
 	cmd.Flags().StringVar(&projectDir, "project", defaultProjectDir(),
 		"project directory to scan for project-scoped components (empty to skip)")
+	cmd.Flags().BoolVar(&reviewUncertain, "review-uncertain", false,
+		"prompt for each value the redactor is uncertain about (default answer redacts)")
 	return cmd
 }
 
-func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projectDir string) error {
+func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projectDir string, reviewUncertain bool) error {
 	out := cmd.OutOrStdout()
 	scope := model.ScanScope{Global: true, ProjectDir: projectDir}
 	results := engine.ScanAll(adapters, scope)
@@ -100,7 +105,11 @@ func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projec
 		return errors.New("no portable components found on this machine; nothing to save")
 	}
 
-	res, err := packio.Convert(invs, packio.ConvertOptions{Name: name})
+	opts := packio.ConvertOptions{Name: name}
+	if reviewUncertain {
+		opts.TreatUncertainAsSecret = newUncertainPrompter(cmd)
+	}
+	res, err := packio.Convert(invs, opts)
 	if err != nil {
 		return err
 	}
@@ -114,8 +123,8 @@ func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projec
 				uncertain = true
 			}
 		}
-		if uncertain {
-			fmt.Fprintln(out, "  (uncertain values were redacted by default; interactive review arrives in a later phase)")
+		if uncertain && !reviewUncertain {
+			fmt.Fprintln(out, "  (uncertain values were redacted by default; rerun with --review-uncertain to decide each one)")
 		}
 	}
 	for _, w := range res.Warnings {
@@ -136,6 +145,43 @@ func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projec
 
 	fmt.Fprintf(out, "wrote pack %q (%d component(s)) to %s\n", name, countComponents(res.Manifest), dir)
 	return nil
+}
+
+// newUncertainPrompter returns a TreatUncertainAsSecret callback that asks
+// the user about each uncertain value. Only uncertain values are ever
+// displayed — showing the value is the point of the review, and it is the
+// user's own terminal — while confirmed secrets redact without being
+// echoed. Empty answers, EOF, and read errors all default to redacting, so
+// a piped or unattended run can never keep a value by accident.
+func newUncertainPrompter(cmd *cobra.Command) func(ref, key, value string, v secrets.Verdict) bool {
+	reader := bufio.NewReader(cmd.InOrStdin())
+	// Prompts go to stderr: with stdout redirected to a file the question
+	// stays visible, and the displayed values stay out of the redirect.
+	out := cmd.ErrOrStderr()
+	return func(ref, key, value string, v secrets.Verdict) bool {
+		fmt.Fprintf(out, "uncertain value in %s — %s\n", ref, key)
+		fmt.Fprintf(out, "  value:  %s\n", value)
+		fmt.Fprintf(out, "  reason: %s\n", v.Reason)
+		for {
+			// "Redact from the pack" is accurate for both outcomes: env and
+			// header values become credential requirements, settings values
+			// are dropped (settings have no credentials field).
+			fmt.Fprint(out, "redact this value from the pack? [Y/n] ")
+			line, err := reader.ReadString('\n')
+			answer := strings.ToLower(strings.TrimSpace(line))
+			switch {
+			case answer == "" || answer == "y" || answer == "yes":
+				return true
+			case answer == "n" || answer == "no":
+				fmt.Fprintf(out, "keeping %s as a plain value\n", key)
+				return false
+			}
+			if err != nil { // EOF or read failure: safe default
+				return true
+			}
+			fmt.Fprintln(out, "please answer y or n")
+		}
+	}
 }
 
 // filterPersonal removes components that live in personal, gitignored

@@ -20,9 +20,11 @@ type ConvertOptions struct {
 	Name string
 
 	// TreatUncertainAsSecret decides uncertain redactor verdicts
-	// (docs/security.md layer 2). nil means always redact — the safe
-	// default; the P2.7 prompt flow supplies an interactive callback.
-	TreatUncertainAsSecret func(key, value string, v secrets.Verdict) bool
+	// (docs/security.md layer 2). componentRef names the component being
+	// converted ("mcp_server/github"). nil means always redact — the safe
+	// default; the save --review-uncertain flow supplies an interactive
+	// callback.
+	TreatUncertainAsSecret func(componentRef, key, value string, v secrets.Verdict) bool
 }
 
 // Bundle is one copy instruction: content the pack carries with it.
@@ -64,7 +66,7 @@ func Convert(invs []model.Inventory, opts ConvertOptions) (*ConvertResult, error
 	}
 	treatUncertain := opts.TreatUncertainAsSecret
 	if treatUncertain == nil {
-		treatUncertain = func(string, string, secrets.Verdict) bool { return true }
+		treatUncertain = func(string, string, string, secrets.Verdict) bool { return true }
 	}
 
 	c := &converter{
@@ -97,7 +99,7 @@ func Convert(invs []model.Inventory, opts ConvertOptions) (*ConvertResult, error
 
 type converter struct {
 	res            *ConvertResult
-	treatUncertain func(string, string, secrets.Verdict) bool
+	treatUncertain func(string, string, string, secrets.Verdict) bool
 	names          map[model.Kind]map[string]bool
 }
 
@@ -230,7 +232,7 @@ func (c *converter) addMCPServer(tool model.ToolID, spec model.MCPServerSpec) {
 func (c *converter) isSecret(componentRef, key, value string) bool {
 	verdict := secrets.Classify(key, value)
 	secret := verdict.Level == secrets.Secret ||
-		(verdict.Level == secrets.Uncertain && c.treatUncertain(key, value, verdict))
+		(verdict.Level == secrets.Uncertain && c.treatUncertain(componentRef, key, value, verdict))
 	if secret {
 		c.res.Redactions = append(c.res.Redactions, Redaction{
 			Component: componentRef, Key: key, Verdict: verdict, Action: "credential",
@@ -272,7 +274,7 @@ func (c *converter) redactAny(ref, key string, v any) (any, bool) {
 	case string:
 		verdict := secrets.Classify(key, val)
 		if verdict.Level == secrets.Secret ||
-			(verdict.Level == secrets.Uncertain && c.treatUncertain(key, val, verdict)) {
+			(verdict.Level == secrets.Uncertain && c.treatUncertain(ref, key, val, verdict)) {
 			c.res.Redactions = append(c.res.Redactions, Redaction{
 				Component: ref, Key: key, Verdict: verdict, Action: "dropped",
 			})
