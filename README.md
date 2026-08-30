@@ -26,6 +26,58 @@ agentpack restore my-setup
 agentpack restore github.com/someone/fullstack-pack
 ```
 
+*`scan` works today; `save` and `restore` are in progress — see [Status](#status).*
+
+## Try it today: `agentpack scan`
+
+The scanner is implemented for Claude Code and Codex CLI. Build from source (Go 1.27+):
+
+```bash
+go install github.com/PhongCT1105/agentpack/cmd/agentpack@latest
+agentpack scan             # scans global config + the current directory
+agentpack scan --json      # machine-readable
+agentpack scan --project ~/work/api   # pick the project scope explicitly
+```
+
+Scan is read-only, and env/header values are always masked — only their names appear in output. Sample output (abbreviated):
+
+```
+$ agentpack scan
+claude-code 2.0.44
+  skill (global)
+    brainstorming  Explore user intent and requirements before implementation
+    code-review
+  skill (project)
+    deploy-check   Verify staging health before promoting a deploy
+  mcp_server (global)
+    github  stdio: npx -y @modelcontextprotocol/server-github  env: GITHUB_API_URL,GITHUB_TOKEN
+    linear  http: https://mcp.linear.app/mcp  headers: Authorization
+  agent (global)
+    db-migrator  Plans and applies database migrations safely
+  rule (project)
+    CLAUDE.md        /home/user/projects/demo/CLAUDE.md
+    CLAUDE.local.md  /home/user/projects/demo/CLAUDE.local.md
+  command (global)
+    review  Run a structured code review over the current diff
+  setting (global)
+    settings.json  /home/user/.claude/settings.json
+  warnings:
+    /home/user/.claude.json: mcpServers.legacy command "old-mcp" not found on this machine; server may be dead
+    /home/user/.claude/commands/workflows: subdirectories are not modeled; skipped
+
+codex 0.45.0
+  mcp_server (global)
+    github  stdio: npx -y @modelcontextprotocol/server-github  env: GITHUB_TOKEN
+  rule (global)
+    AGENTS.md  /home/user/.codex/AGENTS.md
+  command (global)
+    review  Structured review of the current diff
+```
+
+Warnings flag what scan saw but could not model — dead MCP servers, unknown config keys, unscannable files — so nothing vanishes silently.
+
+`save`, `validate`, and `restore` are the next phases of the [backlog](docs/backlog.md); the quick-start above shows where the CLI is heading.
+
 ## Why
 
 You can share source code with Git, dependencies with package manifests, and containers with Docker. But your *AI development environment* — the combination of skills, MCP servers, agents, and rules that makes those tools useful together — still lives in fragmented, machine-local config.
@@ -63,20 +115,20 @@ mcp_servers:
 - **No black boxes.** Before restoring, you see exactly what a pack contains: every skill, MCP server, rule, permission, and external service involved.
 - **Plan before apply.** Restore is a two-step plan/confirm flow, like Terraform. Existing local config is backed up before any write.
 
-## Supported tools (planned for v1)
+## Supported tools
 
-| Tool | Skills | MCP servers | Agents | Rules/instructions | Commands/prompts |
-|---|---|---|---|---|---|
-| Claude Code | ✅ | ✅ | ✅ | ✅ (CLAUDE.md) | ✅ |
-| Codex CLI | – | ✅ | – | ✅ (AGENTS.md) | ✅ |
-| Cursor | – | ✅ | – | ✅ (.cursor/rules) | – |
-| Gemini CLI | – | ✅ | – | ✅ (GEMINI.md) | – |
+| Tool | Skills | MCP servers | Agents | Rules/instructions | Commands/prompts | Scan status |
+|---|---|---|---|---|---|---|
+| Claude Code | ✅ | ✅ | ✅ | ✅ (CLAUDE.md) | ✅ | **implemented** |
+| Codex CLI | – | ✅ | – | ✅ (AGENTS.md) | ✅ | **implemented** |
+| Cursor | – | ✅ | – | ✅ (.cursor/rules) | – | planned (v1) |
+| Gemini CLI | – | ✅ | – | ✅ (GEMINI.md) | – | planned (v1) |
 
 The neutral component model and per-tool adapters are described in [docs/architecture.md](docs/architecture.md). Adding a tool means adding one adapter.
 
 ## Status
 
-**Pre-alpha, docs-first.** This repository currently contains the specification, architecture, and roadmap. Implementation (a Go CLI) is being built in the open, task by task — see [docs/roadmap.md](docs/roadmap.md) and [docs/backlog.md](docs/backlog.md).
+**Pre-alpha.** Phase 1 (scan) is implemented: `agentpack scan` works today for Claude Code and Codex CLI with fixture-tested adapters and cross-platform-minded path handling. Phase 2 (save + validate, including the secrets redactor) is next. Built in the open, task by task — see [docs/roadmap.md](docs/roadmap.md) and [docs/backlog.md](docs/backlog.md).
 
 ## Documentation
 
