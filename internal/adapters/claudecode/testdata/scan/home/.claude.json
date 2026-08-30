@@ -1,0 +1,52 @@
+{
+  "numStartups": 87,
+  "installMethod": "native",
+  "autoUpdates": true,
+  "tipsHistory": {
+    "new-user-warmup": 1,
+    "shift-enter": 12
+  },
+  "promptQueueUseCount": 4,
+  "firstStartTime": "2025-11-02T09:14:33.120Z",
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "ghp_FAKEFAKE",
+        "GITHUB_API_URL": "https://api.github.com"
+      }
+    },
+    "linear": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp",
+      "headers": {
+        "Authorization": "Bearer FAKE-TOKEN-VALUE"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/projects"]
+    }
+  },
+  "projects": {
+    "/home/user/projects/demo": {
+      "allowedTools": ["Bash(go test:*)"],
+      "history": [],
+      "mcpServers": {
+        "local-notes": {
+          "type": "stdio",
+          "command": "notes-mcp"
+        }
+      },
+      "hasTrustDialogAccepted": true
+    },
+    "/home/user/projects/empty": {
+      "allowedTools": [],
+      "mcpServers": {}
+    }
+  },
+  "cachedChangelog": "## 2.0.44\n- assorted fixes",
+  "fallbackAvailableWarningThreshold": 0.5
+}

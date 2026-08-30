@@ -17,7 +17,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [x] P1.2 `internal/model`: Component kinds, Scope, Inventory, Warning types + unit tests
 - [x] P1.3 claude-code adapter: `Detect()` (+fixtures) `[indep]`
 - [x] P1.4 claude-code adapter: `Scan` skills (global+project) from fixture trees
-- [ ] P1.5 claude-code adapter: `Scan` MCP servers (`~/.claude.json` user scope, `.mcp.json` project scope) — surgical read, mixed-file fixture
+- [x] P1.5 claude-code adapter: `Scan` MCP servers (`~/.claude.json` user scope, `.mcp.json` project scope) — surgical read, mixed-file fixture
 - [ ] P1.6 claude-code adapter: `Scan` agents, commands, rules (CLAUDE.md), settings
 - [ ] P1.7 codex adapter: `Detect()` + `Scan` MCP servers from `config.toml` `[indep]`
 - [ ] P1.8 codex adapter: `Scan` AGENTS.md (global+project) + prompts

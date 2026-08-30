@@ -20,9 +20,15 @@ func (a *Adapter) Scan(scope model.ScanScope) (model.Inventory, error) {
 		if err := a.scanSkills(&inv, filepath.Join(a.home, ".claude", "skills"), model.ScopeGlobal); err != nil {
 			return inv, err
 		}
+		if err := a.scanMCPFile(&inv, a.globalMCPPath(), model.ScopeGlobal, true); err != nil {
+			return inv, err
+		}
 	}
 	if scope.ProjectDir != "" {
 		if err := a.scanSkills(&inv, filepath.Join(scope.ProjectDir, ".claude", "skills"), model.ScopeProject); err != nil {
+			return inv, err
+		}
+		if err := a.scanMCPFile(&inv, projectMCPPath(scope.ProjectDir), model.ScopeProject, false); err != nil {
 			return inv, err
 		}
 	}
