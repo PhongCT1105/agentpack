@@ -1,0 +1,5 @@
+{
+  "numStartups": 3,
+  "installMethod": "npm-global",
+  "mcpServers": {}
+}

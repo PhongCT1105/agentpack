@@ -1,0 +1,12 @@
+{
+  "numStartups": 42,
+  "installMethod": "native",
+  "autoUpdates": true,
+  "mcpServers": {},
+  "projects": {
+    "/home/user/projects/demo": {
+      "allowedTools": [],
+      "history": []
+    }
+  }
+}
