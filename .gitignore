@@ -6,6 +6,7 @@
 # Go
 /vendor/
 coverage.out
+*.test
 
 # Editor / OS
 .DS_Store

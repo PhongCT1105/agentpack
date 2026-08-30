@@ -1,0 +1,34 @@
+# CI: build + vet + test across the three supported OSes.
+#
+# NOTE FOR HUMANS: this file must live at .github/workflows/ci.yml, but the
+# automation token used by the overnight loop lacks the `workflow` scope, so
+# pushes touching .github/workflows/ are rejected. Please move this file to
+# .github/workflows/ci.yml (git mv) in a manually-pushed commit.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...

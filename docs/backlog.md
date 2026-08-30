@@ -13,7 +13,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 
 ## Phase 1 — scan
 
-- [ ] P1.1 `go mod init github.com/PhongCT1105/agentpack`; cobra skeleton with `version` command; CI workflow (build+vet+test on macOS/Linux/Windows)
+- [x] P1.1 `go mod init github.com/PhongCT1105/agentpack`; cobra skeleton with `version` command; CI workflow (build+vet+test on macOS/Linux/Windows)
 - [ ] P1.2 `internal/model`: Component kinds, Scope, Inventory, Warning types + unit tests
 - [ ] P1.3 claude-code adapter: `Detect()` (+fixtures) `[indep]`
 - [ ] P1.4 claude-code adapter: `Scan` skills (global+project) from fixture trees
