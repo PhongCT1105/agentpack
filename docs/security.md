@@ -79,7 +79,13 @@ Registry-era protections (signing, verified publishers, scanning of referenced s
 
 - Restore is **plan → confirm → apply**; `--dry-run` stops at the plan.
 - Applies **merge** into existing config; conflicts are shown, and replace requires explicit choice.
-- Every file touched is first copied to `~/.agentpack/backups/<timestamp>/`, and the executor supports rollback of a failed apply.
+- Every file touched is first copied to `~/.agentpack/backups/<timestamp>/` before it is modified, and the executor rolls back a failed apply — modified files are restored byte-for-byte and files it created are removed. The timestamp is `2006-01-02T15-04-05Z`, not literal RFC3339: colons are illegal in Windows filenames, and Windows is a supported platform. A same-second collision gets a `-1`/`-2` suffix.
+- Backup directories are created `0700`: a restored config can contain credentials.
+- Writes go through a temp file and a rename, so an interrupted apply cannot leave a truncated config.
+- Rollback removes only paths it verified are actual directories. A directory path is recorded before it is created, so it can name something that already existed — a regular file sitting where a directory was needed is exactly how the create fails — and deleting that would be the damage rollback exists to prevent.
+- A rollback that itself fails is reported loudly ("ROLLBACK INCOMPLETE", naming the backup directory and every underlying error), never swallowed.
+- **Atomicity is per tool, not per restore.** Each tool's plan is applied independently with its own backup directory, so a failure applying the third tool does not roll back the first two. The backups make that recoverable by hand; cross-tool atomicity would need an explicit ApplyAll.
+- **A merge re-encodes the whole document.** Data is preserved — unrelated keys survive, which is the guarantee that matters — but comments and key order are not: a merge into a hand-commented `~/.codex/config.toml` loses the comments. The backup is the mitigation.
 
 ## Threat 4: credential mishandling on restore
 

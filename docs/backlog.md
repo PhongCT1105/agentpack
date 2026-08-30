@@ -45,7 +45,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 ## Phase 3 — restore
 
 - [x] P3.1 pack reader + `restore` plan rendering (no apply yet): full contents, credentials, external services
-- [ ] P3.2 `internal/engine`: executor — file ops, backups to `~/.agentpack/backups/<ts>/`, rollback on failure
+- [x] P3.2 `internal/engine`: executor — file ops, backups to `~/.agentpack/backups/<ts>/`, rollback on failure
 - [x] P3.3 credential resolver: env → keychain (go-keyring) → prompt; env-expansion injection where supported
 - [ ] P3.4 claude-code adapter `Plan()`: skills, MCP (merge into `.mcp.json`/`~/.claude.json`), agents, commands, rules, settings
 - [ ] P3.5 codex adapter `Plan()`: MCP into `config.toml` tables, AGENTS.md, prompts
@@ -57,6 +57,8 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 
 - [ ] P3.11 hoist `ScanRuleFile` into `internal/adapters/mdscan` and update all four adapters atomically. claudecode, codex, cursor and gemini each carry a private near-identical copy; the gemini and cursor work was done concurrently and deliberately avoided racing on a shared symbol.
 - [ ] P3.12 model tool extensions (Gemini extensions, and the equivalent elsewhere): needs an extension kind in `internal/model` and a section in `docs/spec/pack-manifest.md`. Until then extensions are inventoried as warnings and never published, so `save` cannot misrepresent an extension's MCP servers as user configuration.
+
+- [ ] P3.13 decide whether codex's `config.toml` needs a surgical (comment-preserving) editor. The merge executor re-encodes the document, so a hand-commented config loses its comments on restore. Data is safe and the pre-write backup is the mitigation, but a user's annotated config is worth more than the round-trip convenience.
 
 ## Phase 4 — sharing
 

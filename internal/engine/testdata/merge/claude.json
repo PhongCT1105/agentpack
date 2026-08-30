@@ -1,0 +1,19 @@
+{
+  "numStartups": 87,
+  "installMethod": "native",
+  "autoUpdates": true,
+  "tipsHistory": {
+    "new-user-warmup": 1,
+    "shift-enter": 12
+  },
+  "mcpServers": {
+    "linear": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp",
+      "headers": {
+        "Authorization": "Bearer FAKE-TOKEN-VALUE"
+      }
+    }
+  },
+  "fallbackAvailableWarningThreshold": 0.5
+}

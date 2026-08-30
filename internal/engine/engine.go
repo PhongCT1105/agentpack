@@ -1,5 +1,7 @@
-// Package engine orchestrates the adapters: scan today; plan/apply,
-// lockfile, and backups in Phase 3.
+// Package engine orchestrates the adapters: scan (engine.go), the neutral
+// plan adapters return instead of writing files (plan.go), and the single
+// executor that applies one with backups, dry-run and rollback (apply.go).
+// The lockfile joins them in P3.8.
 package engine
 
 import (

@@ -1,0 +1,9 @@
+# Codex keeps portable MCP config alongside app settings.
+model = "gpt-5-codex"
+approval_policy = "on-request"
+
+[mcp_servers.linear]
+url = "https://mcp.linear.app/mcp"
+
+[history]
+persistence = "save-all"

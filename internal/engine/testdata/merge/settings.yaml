@@ -1,0 +1,8 @@
+theme: dark
+context:
+  fileName: GEMINI.md
+mcpServers:
+  linear:
+    httpUrl: https://mcp.linear.app/mcp
+    headers:
+      Authorization: Bearer FAKE-TOKEN-VALUE
