@@ -15,3 +15,6 @@ coverage.out
 # Local scratch — never commit real machine exports
 /scratch/
 *.local.yaml
+
+# Night-shift loop: local transcripts and reports
+/loop/logs/
