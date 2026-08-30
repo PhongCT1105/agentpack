@@ -69,6 +69,57 @@ var docPlaceholderRes = []*regexp.Regexp{
 	regexp.MustCompile(`^(?i:x{4,})$`),
 }
 
+// placeholderUserinfo are the stand-in words documentation uses in a URL's
+// credential position. "socks5://user:pass@host" is instruction, not a leak.
+var placeholderUserinfo = map[string]bool{
+	"user": true, "username": true, "user1": true, "myuser": true,
+	"pass": true, "passwd": true, "password": true, "mypassword": true,
+	"secret": true, "token": true, "apikey": true, "api_key": true,
+	"changeme": true, "example": true, "placeholder": true, "redacted": true,
+	"": true,
+}
+
+// isCanonicalPlaceholder reports whether a format-channel match is a
+// published documentation stand-in rather than a credential.
+//
+// The format channel is otherwise absolute — a token shape blocks anywhere,
+// unwaivably — so the exceptions here must be ones that CANNOT be a live
+// credential, not merely ones that look unlikely:
+//
+//   - AWS documents AKIAIOSFODNN7EXAMPLE and keys ending in EXAMPLE as
+//     example values; that suffix is reserved convention, never issued.
+//   - A URL whose userinfo is literally "user:pass" is telling the reader
+//     where their own credentials go.
+//   - Templated values (<token>, ${VAR}, {{secret}}, YOUR_KEY_HERE) are
+//     substitution points by construction.
+//
+// Dogfooding motivated this: a skill's docs showing "socks5://user:pass@host"
+// and AWS's own example key made a real machine's pack unsaveable, with no
+// waiver possible by design.
+func isCanonicalPlaceholder(match string) bool {
+	upper := strings.ToUpper(match)
+	if strings.HasSuffix(upper, "EXAMPLE") || strings.Contains(upper, "EXAMPLEKEY") {
+		return true
+	}
+	if strings.Contains(match, "${") || strings.Contains(match, "{{") ||
+		strings.Contains(match, "<") || strings.Contains(upper, "YOUR_") ||
+		strings.Contains(upper, "PLACEHOLDER") {
+		return true
+	}
+	// scheme://userinfo@host — inspect the credential position only.
+	if i := strings.Index(match, "://"); i >= 0 {
+		rest := match[i+3:]
+		at := strings.LastIndex(rest, "@")
+		if at < 0 {
+			return false
+		}
+		userinfo := rest[:at]
+		user, pass, _ := strings.Cut(userinfo, ":")
+		return placeholderUserinfo[strings.ToLower(user)] && placeholderUserinfo[strings.ToLower(pass)]
+	}
+	return false
+}
+
 // fileClass buckets a pack-relative path by how likely an assignment- or
 // entropy-channel match in it is a real secret. classConfig is the fully
 // trusted default (env/JSON/YAML/TOML config, headers, credential files);
@@ -213,6 +264,9 @@ func scanContent(relPath string, data []byte) []Finding {
 				}
 			}
 			if f.needDigit && !hasDigit(content[loc[0]:loc[1]]) {
+				continue
+			}
+			if isCanonicalPlaceholder(content[loc[0]:loc[1]]) {
 				continue
 			}
 			line := 1 + strings.Count(content[:loc[0]], "\n")

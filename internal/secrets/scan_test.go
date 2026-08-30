@@ -211,3 +211,41 @@ func TestScanPackFindingsAreOrdered(t *testing.T) {
 		}
 	}
 }
+
+// Canonical documentation placeholders must not block a save. The format
+// channel is unwaivable by design, so a doc example that trips it makes a
+// pack unsaveable with no escape — which is exactly what happened on a real
+// machine (docs/backlog.md P2.9).
+func TestIsCanonicalPlaceholder(t *testing.T) {
+	placeholders := []string{
+		"AKIAIOSFODNN7EXAMPLE",
+		"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"socks5://user:pass@host:1080",
+		"postgres://username:password@localhost:5432/db",
+		"https://user:pass@residential.proxy.host:1080",
+		"mysql://root:${DB_PASSWORD}@db",
+		"https://<user>:<token>@host",
+		"https://YOUR_USER:YOUR_TOKEN@host",
+	}
+	for _, v := range placeholders {
+		if !isCanonicalPlaceholder(v) {
+			t.Errorf("isCanonicalPlaceholder(%q) = false, want true", v)
+		}
+	}
+}
+
+// The exceptions must stay narrow: a real credential that merely resembles
+// a doc example still has to block.
+func TestReleaseBlocking_CanonicalPlaceholderStaysNarrow(t *testing.T) {
+	real := []string{
+		"AKIA1234567890ABCDEF",
+		"postgres://admin:hunter2iscorrect@prod.example.com:5432/db",
+		"https://deploybot:gho_FAKEabcdefghijklmnopqrstuvwxyz012@github.com",
+		"redis://default:aVeryRealLookingPassword123@cache.internal",
+	}
+	for _, v := range real {
+		if isCanonicalPlaceholder(v) {
+			t.Errorf("isCanonicalPlaceholder(%q) = true, want false — real credentials must still block", v)
+		}
+	}
+}

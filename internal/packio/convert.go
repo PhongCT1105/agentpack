@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -460,6 +461,14 @@ func WritePack(dir string, res *ConvertResult, allow []secrets.AllowEntry, stric
 				Message: fmt.Sprintf("not bundled: %s (%d path(s)) — reinstall or regenerate on restore", reason, rep.excluded[reason]),
 			})
 		}
+		if n := len(rep.escaped); n > 0 {
+			shown := rep.escaped
+			if len(shown) > 3 {
+				shown = shown[:3]
+			}
+			msg := fmt.Sprintf("followed %d symlink(s) resolving outside the component (e.g. %s) — their content is in the pack and was scanned", n, strings.Join(shown, ", "))
+			res.Warnings = append(res.Warnings, model.Warning{Path: b.ToPath, Message: msg})
+		}
 		if rep.bytes > BundleLimitBytes {
 			res.Warnings = append(res.Warnings, model.Warning{
 				Path:    b.ToPath,
@@ -511,6 +520,7 @@ func countsToStrings(m map[string]int) map[string]string {
 type bundleReport struct {
 	bytes    int64
 	excluded map[string]int // exclusion reason -> file count
+	escaped  []string       // symlinks resolving outside the component root
 }
 
 // copyBundle copies a file, or a directory tree of regular files (symlinks
@@ -533,42 +543,88 @@ func copyBundle(from, to string) (bundleReport, error) {
 		rep.bytes = info.Size()
 		return rep, copyFile(from, to, info.Mode().Perm())
 	}
-	err = filepath.WalkDir(from, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	root, rootErr := filepath.EvalSymlinks(from)
+	if rootErr != nil {
+		root = from
+	}
+	visited := map[string]bool{}
+	err = copyTree(from, to, "", &rep, root, visited, 0)
+	return rep, err
+}
+
+// maxBundleDepth bounds recursion through symlinked directories. Cycles are
+// caught by the visited set; this is a second stop for pathological trees.
+const maxBundleDepth = 64
+
+// copyTree copies dir into dst, following symlinks. Following them is
+// required, not optional: real installs symlink content into place — a
+// skill directory whose only entry is "SKILL.md -> /path/to/repo/SKILL.md"
+// is the common case, and skipping non-regular files silently produced an
+// empty directory while the manifest promised content. That mismatch is
+// exactly what restore's bundled-path check catches.
+//
+// Symlinks that resolve outside the component root are still copied (the
+// SKILL.md case above is one) but are recorded, because "this pack contains
+// a file from somewhere else on my disk" is worth saying out loud. Their
+// content is scanned like everything else, so a link to a private key is
+// caught by the format channel rather than trusted.
+func copyTree(dir, dst, rel string, rep *bundleReport, root string, visited map[string]bool, depth int) error {
+	if depth > maxBundleDepth {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		childRel := path.Join(rel, e.Name())
+		src := filepath.Join(dir, e.Name())
+
+		// Stat through symlinks to learn what the entry really is.
+		fi, statErr := os.Stat(src)
+		if statErr != nil {
+			// A broken symlink is reported, not fatal: it carries no content.
+			rep.excluded["unreadable or broken link"]++
+			continue
 		}
-		rel, relErr := filepath.Rel(from, p)
-		if relErr != nil {
-			return relErr
-		}
-		slashRel := filepath.ToSlash(rel)
-		if d.IsDir() {
-			if rel == "." {
-				return nil
-			}
-			// Prune an excluded directory whole rather than walking into
-			// it — the point is never to read 726 MB of node_modules.
-			if reason := BundleExclusion(slashRel + "/x"); reason != "" {
+
+		if fi.IsDir() {
+			if reason := BundleExclusion(childRel + "/x"); reason != "" {
 				rep.excluded[reason]++
-				return fs.SkipDir
+				continue
 			}
-			return nil
+			real, evalErr := filepath.EvalSymlinks(src)
+			if evalErr != nil {
+				real = src
+			}
+			if visited[real] { // symlink cycle
+				continue
+			}
+			visited[real] = true
+			if !strings.HasPrefix(real, root) {
+				rep.escaped = append(rep.escaped, childRel)
+			}
+			if err := copyTree(src, dst, childRel, rep, root, visited, depth+1); err != nil {
+				return err
+			}
+			continue
 		}
-		if !d.Type().IsRegular() {
-			return nil
+		if !fi.Mode().IsRegular() { // sockets, devices, fifos
+			continue
 		}
-		if reason := BundleExclusion(slashRel); reason != "" {
+		if reason := BundleExclusion(childRel); reason != "" {
 			rep.excluded[reason]++
-			return nil
+			continue
 		}
-		fi, err := d.Info()
-		if err != nil {
-			return err
+		if real, evalErr := filepath.EvalSymlinks(src); evalErr == nil && !strings.HasPrefix(real, root) {
+			rep.escaped = append(rep.escaped, childRel)
 		}
 		rep.bytes += fi.Size()
-		return copyFile(p, filepath.Join(to, rel), fi.Mode().Perm())
-	})
-	return rep, err
+		if err := copyFile(src, filepath.Join(dst, filepath.FromSlash(childRel)), fi.Mode().Perm()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func copyFile(from, to string, perm fs.FileMode) error {

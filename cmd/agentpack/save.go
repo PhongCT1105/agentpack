@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -23,6 +24,7 @@ func newSaveCmd(adapters func() []engine.Adapter) *cobra.Command {
 		reviewUncertain bool
 		allowFinding    []string
 		strict          bool
+		exclude         []string
 	)
 	cmd := &cobra.Command{
 		Use:   "save <dir>",
@@ -69,7 +71,7 @@ in CI) does not need --allow-finding repeated.`,
 			if err != nil {
 				return err
 			}
-			return runSaveAll(cmd, adapters(), dir, packName, projectDir, reviewUncertain, allow, strict)
+			return runSaveAll(cmd, adapters(), dir, packName, projectDir, reviewUncertain, allow, strict, excludeSet(exclude))
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "save every portable component without prompting")
@@ -78,6 +80,8 @@ in CI) does not need --allow-finding repeated.`,
 		"project directory to scan for project-scoped components (empty to skip)")
 	cmd.Flags().BoolVar(&reviewUncertain, "review-uncertain", false,
 		"prompt for each value the redactor is uncertain about (default answer redacts)")
+	cmd.Flags().StringArrayVar(&exclude, "exclude", nil,
+		"omit a component from the pack (name or kind/name, repeatable) — use when a component cannot be bundled safely")
 	cmd.Flags().BoolVar(&strict, "strict", false,
 		"treat reviewable findings (heuristic matches in docs, source, tests and lockfiles) as blocking")
 	cmd.Flags().StringArrayVar(&allowFinding, "allow-finding", nil,
@@ -85,7 +89,7 @@ in CI) does not need --allow-finding repeated.`,
 	return cmd
 }
 
-func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projectDir string, reviewUncertain bool, allow []secrets.AllowEntry, strict bool) error {
+func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projectDir string, reviewUncertain bool, allow []secrets.AllowEntry, strict bool, exclude map[string]bool) error {
 	out := cmd.OutOrStdout()
 	scope := model.ScanScope{Global: true, ProjectDir: projectDir}
 	results := engine.ScanAll(adapters, scope)
@@ -101,6 +105,10 @@ func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projec
 			continue
 		}
 		inv, skipped := filterPersonal(res.Inventory)
+		inv, excluded := filterExcluded(inv, exclude)
+		if len(excluded) > 0 {
+			fmt.Fprintf(out, "excluded by request: %s\n", strings.Join(excluded, ", "))
+		}
 		skippedPersonal = append(skippedPersonal, skipped...)
 		fmt.Fprintf(out, "scanned %s: %d component(s)\n", res.Tool, len(inv.Components))
 		invs = append(invs, inv)
@@ -163,6 +171,11 @@ func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projec
 	}
 	if len(blocking) > 0 {
 		printFindings(cmd.ErrOrStderr(), blocking)
+		if comps := blockingComponents(blocking); len(comps) > 0 {
+			fmt.Fprintf(cmd.ErrOrStderr(),
+				"blocking findings come from: %s\n  a known credential format is never waivable — fix the file, or omit the component with --exclude <name>\n",
+				strings.Join(comps, ", "))
+		}
 		fmt.Fprintln(cmd.ErrOrStderr(), "fix the source files above, or if a reviewable finding is a false positive, retry with --allow-finding <path>[:<line>]; nothing was saved")
 	}
 	if err != nil {
@@ -234,4 +247,69 @@ func countComponents(m *packio.Manifest) int {
 	return len(m.Components.Skills) + len(m.Components.MCPServers) +
 		len(m.Components.Agents) + len(m.Components.Rules) +
 		len(m.Components.Commands) + len(m.Components.Settings)
+}
+
+// filterExcluded drops components the user named with --exclude. A value
+// matches either a bare component name ("gstack") or a kind-qualified
+// reference ("skill/gstack"), case-insensitively.
+//
+// This is the honest escape hatch for content that cannot be bundled
+// safely: a component whose own source contains credential patterns — a
+// secret-redaction library is the real-world case — produces blocking
+// findings that are deliberately unwaivable (docs/security.md layer 3).
+// The choice offered is to leave that component out, never to silence the
+// scanner.
+func filterExcluded(inv model.Inventory, exclude map[string]bool) (model.Inventory, []string) {
+	if len(exclude) == 0 {
+		return inv, nil
+	}
+	var skipped []string
+	kept := inv
+	kept.Components = nil
+	for _, c := range inv.Components {
+		name := strings.ToLower(c.Name())
+		qualified := strings.ToLower(string(c.Kind()) + "/" + c.Name())
+		if exclude[name] || exclude[qualified] {
+			skipped = append(skipped, fmt.Sprintf("%s/%s", c.Kind(), c.Name()))
+			continue
+		}
+		kept.Components = append(kept.Components, c)
+	}
+	return kept, skipped
+}
+
+// excludeSet normalizes --exclude values for lookup.
+func excludeSet(vals []string) map[string]bool {
+	if len(vals) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(vals))
+	for _, v := range vals {
+		if v = strings.ToLower(strings.TrimSpace(v)); v != "" {
+			set[v] = true
+		}
+	}
+	return set
+}
+
+// blockingComponents names the pack components that blocking findings came
+// from, so the error can tell the user which --exclude value would help
+// instead of leaving them to map 78 file paths back to a component.
+func blockingComponents(findings []secrets.Finding) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range findings {
+		// Pack paths are "<dir>/<component>/..." e.g. "skills/gstack/lib/x.ts".
+		parts := strings.SplitN(f.Path, "/", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		ref := parts[0] + "/" + parts[1]
+		if !seen[ref] {
+			seen[ref] = true
+			out = append(out, ref)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

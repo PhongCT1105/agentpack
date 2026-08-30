@@ -50,6 +50,12 @@ Not every finding carries the same confidence. A match against a known credentia
 
 The allowlist can never waive a high-confidence format match; there is no flag or file entry that silences one. That is deliberate and it has a cost: a component whose *source* legitimately contains credential patterns — a secret-redaction library, for instance — cannot be bundled at all. The answer there is to fix the file or leave that component out of the pack, never to weaken the guarantee.
 
+### Publishing: run `--strict` first
+
+agentpack's reviewable class reasons about *context* — a `password=secret` in prose, an `AKIAIOSFODNN7EXAMPLE` in docs. Other scanners do not. GitHub secret scanning and a plain `gitleaks` run over a published pack will flag doc examples that agentpack deliberately let through, because they only see the shape.
+
+So the rule for publishing is: **save or validate with `--strict` before pushing a pack to a public repo.** Dogfooding the author's own machine produced a pack that agentpack saved cleanly (76 reviewable findings, all doc examples in third-party skills) and that `gitleaks` then reported two leaks in. Neither was a real credential — but a published pack that trips other people's scanners is a bad pack, and `--strict` is how you find that out before they do.
+
 ### Seeded fixtures
 
 Adapter fixtures and redactor tests seed fake secrets in realistic formats (`ghp_…`, `sk-…`, `AKIA…`, JWTs) so detection is tested against real token shapes. Every seeded fake embeds the string `FAKE`; the repository's `.gitleaks.toml` allowlists exactly that marker, so any secret-shaped string *without* it is a genuine finding and blocks the commit.
