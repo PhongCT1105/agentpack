@@ -35,10 +35,11 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [x] P2.6 `agentpack validate` command: schema + name uniqueness + bundled paths + secret scan; nonzero exit for CI
 - [x] P2.7 uncertain-secret prompt flow (`SUPABASE_URL` problem) with redact-by-default
 - [x] P2.8 docs: pack-authoring guide (`docs/guides/authoring.md`)
+- [ ] P2.9 **scanner false-positive triage** (found by dogfooding): `save --all` on a real machine is blocked by 8775 findings, nearly all from bundled skill *source* (JSX `key={...}`, docs examples `password=secret`, skills' own test fixtures). Scanning bundled content must distinguish config values from source/docs: path- and context-aware rules, an allowlist file, `--allow-finding`, and a clear "review these N findings" flow instead of a hard block on everything. Blocks real-world `save`.
 
 ## Phase 3 — restore
 
-- [ ] P3.1 pack reader + `restore` plan rendering (no apply yet): full contents, credentials, external services
+- [x] P3.1 pack reader + `restore` plan rendering (no apply yet): full contents, credentials, external services
 - [ ] P3.2 `internal/engine`: executor — file ops, backups to `~/.agentpack/backups/<ts>/`, rollback on failure
 - [ ] P3.3 credential resolver: env → keychain (go-keyring) → prompt; env-expansion injection where supported
 - [ ] P3.4 claude-code adapter `Plan()`: skills, MCP (merge into `.mcp.json`/`~/.claude.json`), agents, commands, rules, settings

@@ -1,0 +1,70 @@
+apiVersion: agentpack/v0
+kind: Pack
+metadata:
+  name: fullstack-startup
+  title: Full-Stack Startup Engineer
+  description: Frontend, testing, and database tools for full-stack work.
+  author: PhongCT1105
+  license: MIT
+  tags: [fullstack, github]
+targets: [claude-code, codex]
+components:
+  skills:
+    - name: superpowers
+      description: workflow skill library
+      source:
+        plugin: superpowers@claude-plugins-official
+    - name: find-skills
+      source:
+        npm: "skills"
+        ref: vercel-labs/find-skills
+    - name: notes
+      source:
+        bundled: skills/notes
+      optional: true
+  mcp_servers:
+    - name: github
+      description: GitHub API access
+      transport: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      env:
+        GITHUB_API_URL: https://api.github.com
+      credentials:
+        - env: GITHUB_TOKEN
+          description: GitHub personal access token (repo scope)
+          obtain_url: https://github.com/settings/tokens
+    - name: supabase
+      transport: http
+      url: https://mcp.supabase.com/mcp
+      headers:
+        X-Client-Info: agentpack
+      credentials:
+        - header: Authorization
+          format: "Bearer {value}"
+          description: Supabase access token
+          obtain_url: https://supabase.com/dashboard/account/tokens
+  agents:
+    - name: db-migrator
+      source:
+        bundled: agents/db-migrator.md
+      targets: [claude-code]
+  rules:
+    - name: conventions
+      source:
+        bundled: rules/conventions.md
+      scope: project
+      render:
+        claude-code: CLAUDE.md
+        codex: AGENTS.md
+  commands:
+    - name: review
+      source:
+        bundled: prompts/review.md
+  settings:
+    - name: claude-permissions
+      targets: [claude-code]
+      values:
+        permissions:
+          allow:
+            - "Bash(go test:*)"
