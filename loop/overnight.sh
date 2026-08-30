@@ -111,6 +111,16 @@ while :; do
   landed="$(echo "$result_line" | sed -n 's/.*landed=\([^ ]*\).*/\1/p')"
   note="$(echo "$result_line" | sed -n 's/.*note=\(.*\)/\1/p' | cut -c1-80)"
 
+  # Fast-fail: a model usage limit kills every worker identically — retrying
+  # burns iterations for nothing. Stop immediately with an actionable reason.
+  if grep -qai "reached your .* limit\|usage limit reached\|manage usage credits" "$worker_log"; then
+    limit_msg="$(grep -ai "reached your .* limit\|usage limit reached" "$worker_log" | tail -1 | cut -c1-160)"
+    log "iteration $iter hit a MODEL USAGE LIMIT — not retrying"
+    report "| $iter | usage_limit | none | $limit_msg | $dur |"
+    stop_reason="model usage limit reached: $limit_msg — relaunch with LOOP_CLAUDE_ARGS=\"--model <other>\" or after the limit resets"
+    break
+  fi
+
   if [ "$end_origin" != "$start_origin" ]; then
     failures=0
     log "iteration $iter LANDED: ${landed:-unknown} (${status:-ok}) in $dur"
