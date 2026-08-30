@@ -1,0 +1,9 @@
+{
+  "theme": "Dracula",
+  "selectedAuthType": "gemini-api-key",
+  "mcpServers": {
+    "retired": {
+      "command": "retired-mcp-server"
+    }
+  }
+}

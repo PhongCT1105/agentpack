@@ -51,8 +51,15 @@ Paths are macOS/Linux; Windows equivalents to be added per adapter (`%USERPROFIL
 |---|---|---|
 | MCP servers | `~/.gemini/settings.json` → `mcpServers` | `.gemini/settings.json` → `mcpServers` |
 | Rules / instructions | `~/.gemini/GEMINI.md` | `GEMINI.md` at repo root |
-| Extensions | `~/.gemini/extensions/` *(verify structure)* | — |
+| Extensions | `~/.gemini/extensions/<name>/gemini-extension.json` — inventoried as a warning, **not modeled** | — |
 | Settings | `~/.gemini/settings.json` | `.gemini/settings.json` |
+
+**Notes (confirmed while building the adapter):**
+
+- Gemini has no `type` field; transport is inferred from which key is present — `command` → stdio, **`httpUrl` → streamable HTTP, `url` → SSE**. The neutral model has a single `URL` field, so the adapter records which key it came from.
+- `settings.json` ships in **two layouts**, both seen in the wild: flat (`theme`, `contextFileName`, …) and grouped into sections (`general`, `ui`, `tools`, `context`, `security`, `ide`). Both are handled.
+- Extensions can bundle their own `mcpServers`. They are deliberately **not** flattened into MCP components: doing so would make `save` publish them as though the user had configured them. Each is surfaced as a warning naming it, its version, and its server count. Modeling them properly needs an extension kind in the neutral model and the manifest spec — neither exists yet.
+- The portable-vs-state key lists were derived from documented settings across versions, not a live install; an unrecognized key is reported as unmodeled rather than carried, so drift fails safe.
 
 **Never port:** `~/.gemini/oauth_creds.json`, `.env` files, caches.
 

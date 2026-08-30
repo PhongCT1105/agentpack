@@ -1,0 +1,43 @@
+{
+  "general": {
+    "vimMode": false,
+    "disableUpdateNag": true
+  },
+  "ui": {
+    "theme": "Default",
+    "hideBanner": true
+  },
+  "tools": {
+    "exclude": [
+      "run_shell_command(git push)"
+    ]
+  },
+  "context": {
+    "fileName": "GEMINI.md",
+    "importFormat": "tree"
+  },
+  "security": {
+    "auth": {
+      "selectedType": "gemini-api-key"
+    },
+    "folderTrust": {
+      "enabled": true
+    }
+  },
+  "ide": {
+    "enabled": true,
+    "hasSeenNudge": true
+  },
+  "mcpServers": {
+    "postgres": {
+      "command": "./scripts/pg-mcp.sh",
+      "args": [
+        "--database",
+        "app_dev"
+      ],
+      "env": {
+        "PGPASSWORD": "pg_FAKEFAKEFAKEFAKE"
+      }
+    }
+  }
+}

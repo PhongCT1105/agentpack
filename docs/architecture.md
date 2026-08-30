@@ -59,7 +59,7 @@ type Adapter interface {
 
 Key properties:
 
-- **Scan is read-only.** No adapter writes during scan/save.
+- **Scan is read-only.** No adapter writes during scan/save. One honest caveat: `Detect()` may execute a third-party binary (`<tool> --version`) to read its version, and agentpack cannot guarantee what another vendor's CLI does when invoked. The guarantee is about agentpack's own writes.
 - **Plan/apply split.** Adapters return a `Plan` — a list of intended file operations (`create ~/.claude/skills/x`, `merge key into ~/.claude.json`) — which the engine renders for user confirmation, then executes with backups. Adapters never write files directly; only the engine's executor does, which centralizes backup, dry-run, and rollback.
 - **Merge, don't clobber.** Applying a pack merges into existing config (e.g. adds entries to `mcpServers`) rather than replacing files, except where the user chooses replace mode. Every touched file is backed up to `~/.agentpack/backups/<timestamp>/` first.
 - **Unknown content is preserved and reported.** Anything a scan doesn't understand becomes a `Warning` in the inventory, not silent data loss.

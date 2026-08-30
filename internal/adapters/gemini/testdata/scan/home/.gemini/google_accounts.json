@@ -1,0 +1,6 @@
+{
+  "active": "dev@example.com",
+  "old": [
+    "previous@example.com"
+  ]
+}

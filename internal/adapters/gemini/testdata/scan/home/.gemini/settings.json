@@ -1,0 +1,50 @@
+{
+  "theme": "GitHub",
+  "preferredEditor": "vscode",
+  "vimMode": true,
+  "contextFileName": "GEMINI.md",
+  "autoAccept": false,
+  "checkpointing": {
+    "enabled": true
+  },
+  "fileFiltering": {
+    "respectGitIgnore": true,
+    "enableRecursiveFileSearch": true
+  },
+  "excludeTools": [
+    "run_shell_command(rm -rf)"
+  ],
+  "usageStatisticsEnabled": false,
+  "selectedAuthType": "oauth-personal",
+  "hasSeenIdeIntegrationNudge": true,
+  "folderTrust": {
+    "/Users/dev/work": true
+  },
+  "customWittyPhrases": [
+    "Reticulating splines..."
+  ],
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE"
+      },
+      "cwd": "./servers/github",
+      "timeout": 30000,
+      "trust": false
+    },
+    "linear": {
+      "httpUrl": "https://mcp.linear.app/mcp",
+      "headers": {
+        "Authorization": "Bearer lin_api_FAKEFAKEFAKEFAKE"
+      }
+    },
+    "notion": {
+      "url": "https://mcp.notion.com/sse"
+    }
+  }
+}

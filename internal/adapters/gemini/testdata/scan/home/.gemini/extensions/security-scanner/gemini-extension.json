@@ -1,0 +1,21 @@
+{
+  "name": "security-scanner",
+  "version": "1.2.0",
+  "description": "Static analysis helpers",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "semgrep": {
+      "command": "semgrep-mcp",
+      "args": [
+        "--config",
+        "auto"
+      ]
+    },
+    "trivy": {
+      "command": "trivy-mcp"
+    }
+  },
+  "excludeTools": [
+    "run_shell_command(curl)"
+  ]
+}

@@ -22,3 +22,4 @@ coverage.out
 
 # Fixtures must be tracked even where users globally ignore the real files
 !**/testdata/**/.claude/settings.local.json
+!**/testdata/**/.env

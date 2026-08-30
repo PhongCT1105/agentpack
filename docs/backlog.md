@@ -50,10 +50,13 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [ ] P3.4 claude-code adapter `Plan()`: skills, MCP (merge into `.mcp.json`/`~/.claude.json`), agents, commands, rules, settings
 - [ ] P3.5 codex adapter `Plan()`: MCP into `config.toml` tables, AGENTS.md, prompts
 - [ ] P3.6 cursor adapter: Detect/Scan/Plan (mcp.json, `.cursor/rules/*.mdc` with `render:`) `[indep]`
-- [ ] P3.7 gemini-cli adapter: Detect/Scan/Plan (settings.json, GEMINI.md) `[indep]`
+- [~] P3.7 gemini-cli adapter: Detect+Scan done (settings.json two layouts, GEMINI.md, extensions inventoried); `Plan()` half still open, tracked in P3.5b `[indep]`
 - [ ] P3.8 lockfile write/read; re-apply idempotence test
 - [ ] P3.9 round-trip integration test: scan→save→restore→re-scan equality (CI, all 3 OSes)
 - [ ] P3.10 `agentpack diff`
+
+- [ ] P3.11 hoist `ScanRuleFile` into `internal/adapters/mdscan` and update all four adapters atomically. claudecode, codex, cursor and gemini each carry a private near-identical copy; the gemini and cursor work was done concurrently and deliberately avoided racing on a shared symbol.
+- [ ] P3.12 model tool extensions (Gemini extensions, and the equivalent elsewhere): needs an extension kind in `internal/model` and a section in `docs/spec/pack-manifest.md`. Until then extensions are inventoried as warnings and never published, so `save` cannot misrepresent an extension's MCP servers as user configuration.
 
 ## Phase 4 — sharing
 
