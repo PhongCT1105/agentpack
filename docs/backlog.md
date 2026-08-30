@@ -47,7 +47,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [x] P3.1 pack reader + `restore` plan rendering (no apply yet): full contents, credentials, external services
 - [x] P3.2 `internal/engine`: executor — file ops, backups to `~/.agentpack/backups/<ts>/`, rollback on failure
 - [x] P3.3 credential resolver: env → keychain (go-keyring) → prompt; env-expansion injection where supported
-- [ ] P3.4 claude-code adapter `Plan()`: skills, MCP (merge into `.mcp.json`/`~/.claude.json`), agents, commands, rules, settings
+- [x] P3.4 claude-code adapter `Plan()`: skills, MCP (merge into `.mcp.json`/`~/.claude.json`), agents, commands, rules, settings
 - [ ] P3.5 codex adapter `Plan()`: MCP into `config.toml` tables, AGENTS.md, prompts
 - [~] P3.6 cursor adapter: Detect+Scan done (mcp.json both scopes, `.mdc` rules incl. the unquoted-globs gotcha, legacy `.cursorrules`, commands); `Plan()` half still open `[indep]`
 - [~] P3.7 gemini-cli adapter: Detect+Scan done (settings.json two layouts, GEMINI.md, extensions inventoried); `Plan()` half still open, tracked in P3.5b `[indep]`

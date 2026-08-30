@@ -40,6 +40,26 @@ func (t Transport) Valid() bool {
 	return t == TransportStdio || t == TransportHTTP || t == TransportSSE
 }
 
+// Credential names a secret that must be supplied for a component to work —
+// the injection point (an env var or a header), how the value is rendered,
+// and where an installer obtains one. It mirrors the manifest's
+// `credentials:` entry (docs/spec/pack-manifest.md) and, like it, has
+// deliberately no value field: a credential travels as a *requirement*, and
+// the resolved secret reaches an adapter separately, in engine.PlanOpts
+// (docs/security.md layer 1).
+//
+// Scanners do not produce these — a scan sees values, and the redactor turns
+// the secret ones into credentials on save. Restore is where they matter: an
+// adapter must know an injection point exists in order to reference it even
+// when no value was resolved.
+type Credential struct {
+	Env         string // inject as this env var…
+	Header      string // …or as this header (exactly one of the two)
+	Format      string // header rendering template, e.g. "Bearer {value}"
+	Description string
+	ObtainURL   string
+}
+
 // MCPServerSpec is the data of a scanned MCP server. Env and Headers hold
 // raw scanned values — secrets included — and MUST pass through the secrets
 // redactor before any of this reaches a pack (docs/security.md layer 2).
@@ -52,6 +72,11 @@ type MCPServerSpec struct {
 	Env       map[string]string // stdio
 	URL       string            // http/sse
 	Headers   map[string]string // http/sse
+
+	// Credentials are the secrets this server needs that Env and Headers
+	// therefore do not carry. Empty on the scan side; populated on restore
+	// from the pack's `credentials:` list.
+	Credentials []Credential
 }
 
 // MCPServer is a neutral MCP server component.
@@ -105,6 +130,13 @@ type RuleSpec struct {
 	Name  string
 	Scope Scope
 	Path  string
+
+	// Render maps a tool to the relative path that tool reads the content
+	// from (claude-code → "CLAUDE.md", codex → "AGENTS.md"). It mirrors the
+	// manifest's `render:` map: one logical rule, one file name per tool.
+	// Empty on the scan side, where the path a rule was found at already
+	// says how the tool consumes it.
+	Render map[ToolID]string
 }
 
 // Rule is a neutral rule component.
