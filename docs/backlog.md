@@ -30,7 +30,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [x] P2.1 `internal/packio`: manifest Go types matching spec v0.1; YAML marshal/unmarshal round-trip tests
 - [x] P2.2 `internal/secrets`: redactor (key patterns, value formats, entropy) + exhaustive table tests
 - [x] P2.3 `internal/secrets`: whole-pack scanner; adversarial fixture suite (release-blocking test tag)
-- [ ] P2.4 inventory → pack conversion incl. env/credentials split and bundled-content copying
+- [x] P2.4 inventory → pack conversion incl. env/credentials split and bundled-content copying
 - [ ] P2.5 `agentpack save` command: component selection (`--all` first, interactive later), writes pack dir
 - [ ] P2.6 `agentpack validate` command: schema + name uniqueness + bundled paths + secret scan; nonzero exit for CI
 - [ ] P2.7 uncertain-secret prompt flow (`SUPABASE_URL` problem) with redact-by-default
