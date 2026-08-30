@@ -6,7 +6,34 @@ import "testing"
 var (
 	_ Component = Skill{}
 	_ Component = MCPServer{}
+	_ Component = Agent{}
+	_ Component = Command{}
+	_ Component = Rule{}
+	_ Component = Setting{}
 )
+
+func TestComponentKinds(t *testing.T) {
+	tests := []struct {
+		c    Component
+		want Kind
+	}{
+		{Agent{Spec: AgentSpec{Name: "db-migrator", Scope: ScopeGlobal}}, KindAgent},
+		{Command{Spec: CommandSpec{Name: "review", Scope: ScopeProject}}, KindCommand},
+		{Rule{Spec: RuleSpec{Name: "CLAUDE.md", Scope: ScopeGlobal}}, KindRule},
+		{Setting{Spec: SettingSpec{Name: "settings.json", Scope: ScopeProject}}, KindSetting},
+	}
+	for _, tt := range tests {
+		if got := tt.c.Kind(); got != tt.want {
+			t.Errorf("%T.Kind() = %q, want %q", tt.c, got, tt.want)
+		}
+		if tt.c.Name() == "" {
+			t.Errorf("%T.Name() is empty", tt.c)
+		}
+		if !tt.c.Scope().Valid() {
+			t.Errorf("%T.Scope() = %q is invalid", tt.c, tt.c.Scope())
+		}
+	}
+}
 
 func TestSkillComponent(t *testing.T) {
 	s := Skill{Spec: SkillSpec{

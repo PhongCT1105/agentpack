@@ -1,0 +1,13 @@
+{
+  "model": "opus",
+  "permissions": {
+    "allow": [
+      "Bash(go test:*)",
+      "Bash(go build:*)"
+    ],
+    "deny": []
+  },
+  "env": {
+    "GOFLAGS": "-count=1"
+  }
+}

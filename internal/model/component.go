@@ -62,3 +62,75 @@ type MCPServer struct {
 func (m MCPServer) Kind() Kind   { return KindMCPServer }
 func (m MCPServer) Name() string { return m.Spec.Name }
 func (m MCPServer) Scope() Scope { return m.Spec.Scope }
+
+// AgentSpec is the data of a scanned agent definition (a markdown file,
+// usually with YAML frontmatter naming and describing the agent).
+type AgentSpec struct {
+	Name        string
+	Scope       Scope
+	Path        string // the .md file
+	Description string // from frontmatter, may be empty
+}
+
+// Agent is a neutral agent-definition component.
+type Agent struct {
+	Spec AgentSpec
+}
+
+func (a Agent) Kind() Kind   { return KindAgent }
+func (a Agent) Name() string { return a.Spec.Name }
+func (a Agent) Scope() Scope { return a.Spec.Scope }
+
+// CommandSpec is the data of a scanned reusable prompt / slash command.
+type CommandSpec struct {
+	Name        string
+	Scope       Scope
+	Path        string // the .md file
+	Description string // from frontmatter, may be empty
+}
+
+// Command is a neutral command component.
+type Command struct {
+	Spec CommandSpec
+}
+
+func (c Command) Kind() Kind   { return KindCommand }
+func (c Command) Name() string { return c.Spec.Name }
+func (c Command) Scope() Scope { return c.Spec.Scope }
+
+// RuleSpec is the data of a scanned instruction/rule file (CLAUDE.md,
+// AGENTS.md, GEMINI.md, .cursor/rules/*.mdc). Name is the file's base name;
+// uniqueness holds within (kind, scope).
+type RuleSpec struct {
+	Name  string
+	Scope Scope
+	Path  string
+}
+
+// Rule is a neutral rule component.
+type Rule struct {
+	Spec RuleSpec
+}
+
+func (r Rule) Kind() Kind   { return KindRule }
+func (r Rule) Name() string { return r.Spec.Name }
+func (r Rule) Scope() Scope { return r.Spec.Scope }
+
+// SettingSpec is the data of a scanned settings document. Values holds the
+// parsed document as generic JSON; like MCP env values it is raw scanned
+// data and must pass the secrets redactor before reaching a pack.
+type SettingSpec struct {
+	Name   string
+	Scope  Scope
+	Path   string
+	Values map[string]any
+}
+
+// Setting is a neutral settings component.
+type Setting struct {
+	Spec SettingSpec
+}
+
+func (s Setting) Kind() Kind   { return KindSetting }
+func (s Setting) Name() string { return s.Spec.Name }
+func (s Setting) Scope() Scope { return s.Spec.Scope }

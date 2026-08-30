@@ -19,3 +19,6 @@ coverage.out
 
 # Night-shift loop: local transcripts and reports
 /loop/logs/
+
+# Fixtures must be tracked even where users globally ignore the real files
+!**/testdata/**/.claude/settings.local.json
