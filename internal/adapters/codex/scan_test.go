@@ -81,10 +81,14 @@ func TestScanMCPFromConfigTOML(t *testing.T) {
 	}
 
 	// config.toml's other tables (model, profiles, …) must not leak into
-	// the inventory, and auth.json must never be modeled.
-	if len(inv.Components) != 2 {
-		t.Errorf("inventory has %d components, want exactly the 2 MCP servers: %v",
-			len(inv.Components), inv.Components)
+	// the inventory as MCP servers, and auth.json must never be modeled.
+	if n := len(inv.ByKind(model.KindMCPServer)); n != 2 {
+		t.Errorf("inventory has %d MCP servers, want exactly 2: %v", n, inv.Components)
+	}
+	for _, c := range inv.Components {
+		if strings.Contains(c.Name(), "auth") {
+			t.Errorf("auth.json leaked into inventory as %v", c)
+		}
 	}
 }
 

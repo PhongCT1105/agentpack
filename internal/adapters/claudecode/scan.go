@@ -1,14 +1,13 @@
 package claudecode
 
 import (
-	"bytes"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 
+	"github.com/PhongCT1105/agentpack/internal/adapters/mdscan"
 	"github.com/PhongCT1105/agentpack/internal/model"
-	"gopkg.in/yaml.v3"
 )
 
 // Scan reads Claude Code configuration in the requested scopes into the
@@ -101,7 +100,7 @@ func (a *Adapter) scanSkills(inv *model.Inventory, dir string, scope model.Scope
 		if readErr != nil {
 			return readErr
 		}
-		fm, fmErr := parseFrontmatter(raw)
+		fm, fmErr := mdscan.ParseFrontmatter(raw)
 		if fmErr != nil {
 			inv.Warnings = append(inv.Warnings, model.Warning{
 				Path:    md,
@@ -116,31 +115,4 @@ func (a *Adapter) scanSkills(inv *model.Inventory, dir string, scope model.Scope
 		}})
 	}
 	return nil
-}
-
-// frontmatter is the subset of a markdown file's leading YAML block that
-// scanning cares about.
-type frontmatter struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-}
-
-// parseFrontmatter extracts a leading YAML frontmatter block (--- ... ---).
-// A file without frontmatter yields a zero value and nil error; a block that
-// fails to parse yields a zero value and the parse error.
-func parseFrontmatter(md []byte) (frontmatter, error) {
-	body := bytes.TrimPrefix(md, []byte{0xEF, 0xBB, 0xBF}) // tolerate a UTF-8 BOM
-	if !bytes.HasPrefix(body, []byte("---\n")) && !bytes.HasPrefix(body, []byte("---\r\n")) {
-		return frontmatter{}, nil
-	}
-	rest := body[3:] // past the opening ---
-	end := bytes.Index(rest, []byte("\n---"))
-	if end < 0 {
-		return frontmatter{}, nil // unterminated: treat as no frontmatter
-	}
-	var fm frontmatter
-	if err := yaml.Unmarshal(rest[:end], &fm); err != nil {
-		return frontmatter{}, err
-	}
-	return fm, nil
 }

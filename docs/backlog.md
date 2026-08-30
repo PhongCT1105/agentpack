@@ -20,7 +20,7 @@ Granular tasks, ordered within each phase. Written so that an autonomous agent (
 - [x] P1.5 claude-code adapter: `Scan` MCP servers (`~/.claude.json` user scope, `.mcp.json` project scope) — surgical read, mixed-file fixture
 - [x] P1.6 claude-code adapter: `Scan` agents, commands, rules (CLAUDE.md), settings
 - [x] P1.7 codex adapter: `Detect()` + `Scan` MCP servers from `config.toml` `[indep]`
-- [ ] P1.8 codex adapter: `Scan` AGENTS.md (global+project) + prompts
+- [x] P1.8 codex adapter: `Scan` AGENTS.md (global+project) + prompts
 - [ ] P1.9 `agentpack scan` command: table output grouped by tool/kind/scope; `--json`
 - [ ] P1.10 scan warnings: dead MCP servers (missing command), backup-file debris ignored, unknown keys surfaced
 - [ ] P1.11 README: replace "planned" scan section with real usage + sample output
