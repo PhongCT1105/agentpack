@@ -380,3 +380,45 @@ func plural(n int, noun string) string {
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
 }
+
+// PlanOpts carries everything an adapter needs to turn neutral components
+// into concrete file operations for one machine.
+type PlanOpts struct {
+	// Home is the user's home directory. Injectable so tests never plan
+	// against the real one.
+	Home string
+
+	// ProjectDir is where project-scoped components land. Empty means the
+	// caller offered no project, and an adapter must skip project-scoped
+	// components with a warning rather than guessing a directory.
+	ProjectDir string
+
+	// PackDir is the root of the pack being restored, for resolving a
+	// component's bundled content.
+	PackDir string
+
+	// Credentials maps a credential's injection point (an env var name, or
+	// a header name) to the value the resolver produced for it. An adapter
+	// writes these into tool config; a missing entry means the user did not
+	// supply that credential, and the adapter must still emit the server
+	// with the injection point referenced (e.g. "${GITHUB_TOKEN}") rather
+	// than silently dropping it.
+	Credentials map[string]string
+
+	// Replace turns merge-into-existing into overwrite for files where the
+	// user explicitly chose replacement. The executor still backs up first.
+	Replace bool
+}
+
+// Planner is implemented by adapters that can write configuration, not just
+// read it. It is deliberately separate from Adapter: scanning and applying
+// are independent capabilities, and keeping them apart lets an adapter ship
+// read support first and gain write support later without every other
+// adapter having to implement a method it does not yet support.
+//
+// A Planner never writes. It returns a Plan for the executor to render,
+// confirm and apply — see docs/architecture.md, "Plan/apply split".
+type Planner interface {
+	Adapter
+	Plan(components []model.Component, opts PlanOpts) (Plan, []model.Warning, error)
+}
