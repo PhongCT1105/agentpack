@@ -12,6 +12,12 @@
 #   LOOP_CLAUDE_ARGS  extra args for worker sessions (e.g. --model opus)
 set -uo pipefail
 
+# Keep the Mac awake for the whole run: re-exec under caffeinate once.
+if [ -z "${LOOP_CAFFEINATED:-}" ] && command -v caffeinate >/dev/null 2>&1; then
+  export LOOP_CAFFEINATED=1
+  exec caffeinate -dimsu "$0" "$@"
+fi
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
