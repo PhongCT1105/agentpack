@@ -387,33 +387,55 @@ func sortedAnyKeys(m map[string]any) []string {
 // must be an empty directory. After writing, the whole-pack secret scan
 // (docs/security.md layer 3) runs as a final gate: any finding removes the
 // written pack and fails the save — a leaky pack never stays on disk.
-func WritePack(dir string, res *ConvertResult) ([]secrets.Finding, error) {
+//
+// allow is the review flow's allowlist (docs/backlog.md P2.9): entries a
+// caller has decided waive specific findings (e.g. from --allow-finding).
+// Only Reviewable findings can ever be matched (secrets.FilterAllowed) — a
+// high-confidence match always blocks regardless of allow.
+//
+// Findings come back in three buckets:
+//
+//   - blocking — a known credential format anywhere, or a heuristic match in
+//     a config-shaped file. These fail the save and the pack is removed.
+//   - reviewable — a heuristic (assignment/entropy) match in docs, source,
+//     test-fixture or lockfile content, where those shapes are overwhelmingly
+//     false positives. These are REPORTED, not fatal: bundling one real
+//     third-party skill produced 8699 such findings, and a gate that fails on
+//     that is a gate people switch off. Passing strict promotes them to
+//     blocking, which is what CI over a curated pack should do.
+//   - allowed — waived by allow, for transparent reporting.
+//
+// When allow waives at least one finding and the save succeeds, the entries
+// actually used are written to dir/AllowlistFilename so a later `validate`
+// (e.g. in CI) remembers the review without the caller repeating
+// --allow-finding.
+func WritePack(dir string, res *ConvertResult, allow []secrets.AllowEntry, strict bool) (blocking, reviewable, allowed []secrets.Finding, err error) {
 	info, err := os.Stat(dir)
 	switch {
 	case err == nil:
 		if !info.IsDir() {
-			return nil, fmt.Errorf("writing pack: %s exists and is not a directory", dir)
+			return nil, nil, nil, fmt.Errorf("writing pack: %s exists and is not a directory", dir)
 		}
 		entries, readErr := os.ReadDir(dir)
 		if readErr != nil {
-			return nil, fmt.Errorf("writing pack: %w", readErr)
+			return nil, nil, nil, fmt.Errorf("writing pack: %w", readErr)
 		}
 		if len(entries) > 0 {
-			return nil, fmt.Errorf("writing pack: %s is not empty", dir)
+			return nil, nil, nil, fmt.Errorf("writing pack: %s is not empty", dir)
 		}
 	case os.IsNotExist(err):
 		if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
-			return nil, fmt.Errorf("writing pack: %w", mkErr)
+			return nil, nil, nil, fmt.Errorf("writing pack: %w", mkErr)
 		}
 	default:
-		return nil, fmt.Errorf("writing pack: %w", err)
+		return nil, nil, nil, fmt.Errorf("writing pack: %w", err)
 	}
 
-	fail := func(e error) ([]secrets.Finding, error) {
+	fail := func(e error) (blocking, reviewable, allowed []secrets.Finding, err error) {
 		if rmErr := os.RemoveAll(dir); rmErr != nil {
 			e = fmt.Errorf("%w (cleanup also failed, manually remove %s: %v)", e, dir, rmErr)
 		}
-		return nil, e
+		return nil, nil, nil, e
 	}
 
 	data, err := EncodeManifest(res.Manifest)
@@ -425,8 +447,24 @@ func WritePack(dir string, res *ConvertResult) ([]secrets.Finding, error) {
 	}
 
 	for _, b := range res.Bundles {
-		if err := copyBundle(b.FromPath, filepath.Join(dir, filepath.FromSlash(b.ToPath))); err != nil {
+		rep, err := copyBundle(b.FromPath, filepath.Join(dir, filepath.FromSlash(b.ToPath)))
+		if err != nil {
 			return fail(fmt.Errorf("bundling %s: %w", b.FromPath, err))
+		}
+		// Exclusions are reported, never silent: the user should know that
+		// what landed in the pack is not a byte-for-byte copy of what they
+		// have locally.
+		for _, reason := range sortedKeys(countsToStrings(rep.excluded)) {
+			res.Warnings = append(res.Warnings, model.Warning{
+				Path:    b.ToPath,
+				Message: fmt.Sprintf("not bundled: %s (%d path(s)) — reinstall or regenerate on restore", reason, rep.excluded[reason]),
+			})
+		}
+		if rep.bytes > BundleLimitBytes {
+			res.Warnings = append(res.Warnings, model.Warning{
+				Path:    b.ToPath,
+				Message: fmt.Sprintf("bundle is %.1f MiB after exclusions — portable content is normally text; consider referencing this component by source instead of bundling it", float64(rep.bytes)/(1<<20)),
+			})
 		}
 	}
 
@@ -434,45 +472,103 @@ func WritePack(dir string, res *ConvertResult) ([]secrets.Finding, error) {
 	if err != nil {
 		return fail(fmt.Errorf("scanning written pack: %w", err))
 	}
-	if len(findings) > 0 {
-		err := fmt.Errorf("save blocked: %d suspected secret(s) in the written pack", len(findings))
+	remaining, allowedFindings, used, _ := secrets.FilterAllowed(findings, allow)
+	for _, f := range remaining {
+		if f.Reviewable && !strict {
+			reviewable = append(reviewable, f)
+		} else {
+			blocking = append(blocking, f)
+		}
+	}
+	if len(blocking) > 0 {
+		err := fmt.Errorf("save blocked: %d suspected secret(s) in the written pack", len(blocking))
 		// The contract is that a leaky pack never stays on disk; a failed
 		// removal must be loud, not silent.
 		if rmErr := os.RemoveAll(dir); rmErr != nil {
 			err = fmt.Errorf("%w (cleanup also failed, manually remove %s: %v)", err, dir, rmErr)
 		}
-		return findings, err
+		return blocking, reviewable, allowedFindings, err
 	}
-	return nil, nil
+	if len(used) > 0 {
+		if err := os.WriteFile(filepath.Join(dir, AllowlistFilename), secrets.FormatAllowlist(used), 0o644); err != nil {
+			return nil, reviewable, allowedFindings, fmt.Errorf("writing %s: %w", AllowlistFilename, err)
+		}
+	}
+	return nil, reviewable, allowedFindings, nil
+}
+
+// countsToStrings adapts a reason->count map to the string-keyed map
+// sortedKeys expects, so exclusion warnings come out in a stable order.
+func countsToStrings(m map[string]int) map[string]string {
+	out := make(map[string]string, len(m))
+	for k := range m {
+		out[k] = ""
+	}
+	return out
+}
+
+// bundleReport describes what copyBundle kept and what it refused to copy.
+type bundleReport struct {
+	bytes    int64
+	excluded map[string]int // exclusion reason -> file count
 }
 
 // copyBundle copies a file, or a directory tree of regular files (symlinks
-// and other specials are skipped, matching the scanner's coverage).
-func copyBundle(from, to string) error {
+// and other specials are skipped, matching the scanner's coverage), leaving
+// out anything BundleExclusion rejects: credential carriers, vendored
+// dependencies, build output and caches. The returned report lets the
+// caller tell the user what was left behind instead of dropping it
+// silently, and how large the surviving bundle is.
+func copyBundle(from, to string) (bundleReport, error) {
+	rep := bundleReport{excluded: map[string]int{}}
 	info, err := os.Stat(from)
 	if err != nil {
-		return err
+		return rep, err
 	}
 	if !info.IsDir() {
-		return copyFile(from, to, info.Mode().Perm())
+		if reason := BundleExclusion(filepath.Base(from)); reason != "" {
+			rep.excluded[reason]++
+			return rep, nil
+		}
+		rep.bytes = info.Size()
+		return rep, copyFile(from, to, info.Mode().Perm())
 	}
-	return filepath.WalkDir(from, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(from, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !d.Type().IsRegular() {
+		rel, relErr := filepath.Rel(from, p)
+		if relErr != nil {
+			return relErr
+		}
+		slashRel := filepath.ToSlash(rel)
+		if d.IsDir() {
+			if rel == "." {
+				return nil
+			}
+			// Prune an excluded directory whole rather than walking into
+			// it — the point is never to read 726 MB of node_modules.
+			if reason := BundleExclusion(slashRel + "/x"); reason != "" {
+				rep.excluded[reason]++
+				return fs.SkipDir
+			}
 			return nil
 		}
-		rel, err := filepath.Rel(from, path)
-		if err != nil {
-			return err
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		if reason := BundleExclusion(slashRel); reason != "" {
+			rep.excluded[reason]++
+			return nil
 		}
 		fi, err := d.Info()
 		if err != nil {
 			return err
 		}
-		return copyFile(path, filepath.Join(to, rel), fi.Mode().Perm())
+		rep.bytes += fi.Size()
+		return copyFile(p, filepath.Join(to, rel), fi.Mode().Perm())
 	})
+	return rep, err
 }
 
 func copyFile(from, to string, perm fs.FileMode) error {

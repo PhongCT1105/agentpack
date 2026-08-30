@@ -452,6 +452,86 @@ func TestSaveForwardsProjectDir(t *testing.T) {
 	}
 }
 
+// TestSaveReviewableFindingBlocksThenAllowFindingSucceeds is the P2.9
+// end-to-end story (docs/backlog.md): save --all on real-world bundled
+// content blocked on a review-tier finding (a docs-context assignment
+// example, not a real secret), with no recourse. --allow-finding now lets
+// a reviewer waive it after inspection, and the waiver is recorded in
+// .agentpack-allow so a later validate does not need it repeated.
+func TestSaveReviewableFindingBlocksThenAllowFindingSucceeds(t *testing.T) {
+	src := t.TempDir()
+	skillDir := filepath.Join(src, "skills", "docs-example")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "# Docs example skill\n\nExample config for local testing only:\n\npassword=FAKEexample12345\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inv := model.Inventory{
+		Tool: model.ToolClaudeCode,
+		Components: []model.Component{
+			model.Skill{Spec: model.SkillSpec{Name: "docs-example", Scope: model.ScopeGlobal, Dir: skillDir}},
+		},
+	}
+	adapters := func() []engine.Adapter {
+		return []engine.Adapter{stubAdapter{id: model.ToolClaudeCode, installed: true, inv: inv}}
+	}
+
+	// Default: a docs-context match is reported but does not block, and the
+	// pack is written — a gate that fails here would fail on every real
+	// machine (see docs/backlog.md P2.9).
+	dir := filepath.Join(t.TempDir(), "pack")
+	out, err := runSave(t, adapters, "--all", "--name", "reviewable", dir)
+	if err != nil {
+		t.Fatalf("save with a reviewable finding failed: %v\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(out, "reviewable finding") {
+		t.Errorf("output does not report the reviewable finding:\n%s", out)
+	}
+	if _, statErr := os.Stat(dir); statErr != nil {
+		t.Errorf("non-blocking save did not write the pack: %v", statErr)
+	}
+
+	// --strict promotes it to blocking and the pack is removed.
+	dirStrict := filepath.Join(t.TempDir(), "pack")
+	outStrict, err := runSave(t, adapters, "--all", "--name", "reviewable", "--strict", dirStrict)
+	if err == nil {
+		t.Fatalf("save --strict with a reviewable finding succeeded; output:\n%s", outStrict)
+	}
+	if _, statErr := os.Stat(dirStrict); !os.IsNotExist(statErr) {
+		t.Errorf("blocked save left pack dir on disk: %v", statErr)
+	}
+
+	dir2 := filepath.Join(t.TempDir(), "pack")
+	out2, err := runSave(t, adapters, "--all", "--name", "reviewable", "--strict",
+		"--allow-finding", "skills/docs-example/SKILL.md:5", dir2)
+	if err != nil {
+		t.Fatalf("save with --allow-finding failed: %v\noutput:\n%s", err, out2)
+	}
+	if !strings.Contains(out2, "waived") {
+		t.Errorf("output does not report the waived finding:\n%s", out2)
+	}
+	data, err := os.ReadFile(filepath.Join(dir2, packio.AllowlistFilename))
+	if err != nil {
+		t.Fatalf("%s not written: %v", packio.AllowlistFilename, err)
+	}
+	if !strings.Contains(string(data), "skills/docs-example/SKILL.md:5") {
+		t.Errorf("%s does not record the waived finding:\n%s", packio.AllowlistFilename, data)
+	}
+}
+
+func TestSaveAllowFindingRejectsBadSyntax(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "pack")
+	_, err := runSave(t, saveFixtures(t, false), "--all", "--allow-finding", "bad:notanumber", dir)
+	if err == nil {
+		t.Error("save with malformed --allow-finding = nil error, want error")
+	}
+	if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
+		t.Errorf("rejected --allow-finding still wrote a pack: %v", statErr)
+	}
+}
+
 func TestSaveRefusesNonEmptyTarget(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("x"), 0o644); err != nil {

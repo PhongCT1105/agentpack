@@ -33,13 +33,20 @@ func (i Issue) String() string {
 // I/O-level failure (the directory itself unreadable); everything wrong
 // with the pack comes back as issues and findings, both of which make the
 // pack invalid.
-func ValidatePack(dir string) ([]Issue, []secrets.Finding, error) {
+//
+// allow supplements the pack's own dir/AllowlistFilename, when present, as
+// the review flow's allowlist (docs/backlog.md P2.9): entries a caller has
+// decided waive specific findings (e.g. from --allow-finding). Only
+// Reviewable findings can ever be matched — a high-confidence match always
+// blocks regardless of allow. blocking is what still fails validation;
+// allowed is what the merged allowlist waived, for transparent reporting.
+func ValidatePack(dir string, allow []secrets.AllowEntry) ([]Issue, []secrets.Finding, []secrets.Finding, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("validating pack: %w", err)
+		return nil, nil, nil, fmt.Errorf("validating pack: %w", err)
 	}
 	if !info.IsDir() {
-		return nil, nil, fmt.Errorf("validating pack: %s is not a directory", dir)
+		return nil, nil, nil, fmt.Errorf("validating pack: %s is not a directory", dir)
 	}
 
 	var issues []Issue
@@ -48,7 +55,7 @@ func ValidatePack(dir string) ([]Issue, []secrets.Finding, error) {
 	case errors.Is(err, fs.ErrNotExist):
 		issues = append(issues, Issue{Message: ManifestFilename + " not found: not a pack directory"})
 	case err != nil:
-		return nil, nil, fmt.Errorf("validating pack: %w", err)
+		return nil, nil, nil, fmt.Errorf("validating pack: %w", err)
 	default:
 		m, decodeErr := DecodeManifest(data)
 		if decodeErr != nil {
@@ -80,16 +87,43 @@ func ValidatePack(dir string) ([]Issue, []secrets.Finding, error) {
 		return nil
 	})
 	if walkErr != nil {
-		return issues, nil, fmt.Errorf("validating pack: %w", walkErr)
+		return issues, nil, nil, fmt.Errorf("validating pack: %w", walkErr)
 	}
 
 	// The secret scan always runs (docs/security.md layer 3): a schema
 	// violation must not mask a leak.
 	findings, err := secrets.ScanPack(dir)
 	if err != nil {
-		return issues, nil, fmt.Errorf("validating pack: %w", err)
+		return issues, nil, nil, fmt.Errorf("validating pack: %w", err)
 	}
-	return issues, findings, nil
+
+	// A committed dir/AllowlistFilename (docs/backlog.md P2.9 review flow)
+	// applies automatically, same as CI would see it; allow supplements it
+	// for one-off local overrides.
+	fileAllow, err := loadAllowlistFile(dir)
+	if err != nil {
+		return issues, nil, nil, fmt.Errorf("validating pack: %w", err)
+	}
+	merged := append(append([]secrets.AllowEntry(nil), fileAllow...), allow...)
+	blocking, allowedFindings, _, _ := secrets.FilterAllowed(findings, merged)
+	return issues, blocking, allowedFindings, nil
+}
+
+// loadAllowlistFile reads dir/AllowlistFilename, returning no entries (not
+// an error) when it does not exist — most packs have none.
+func loadAllowlistFile(dir string) ([]secrets.AllowEntry, error) {
+	data, err := os.ReadFile(filepath.Join(dir, AllowlistFilename))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	entries, err := secrets.ParseAllowlist(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", AllowlistFilename, err)
+	}
+	return entries, nil
 }
 
 func validateManifest(dir string, m *Manifest) []Issue {

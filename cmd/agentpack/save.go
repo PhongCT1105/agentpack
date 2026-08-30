@@ -21,6 +21,8 @@ func newSaveCmd(adapters func() []engine.Adapter) *cobra.Command {
 		name            string
 		projectDir      string
 		reviewUncertain bool
+		allowFinding    []string
+		strict          bool
 	)
 	cmd := &cobra.Command{
 		Use:   "save <dir>",
@@ -36,7 +38,16 @@ re-checks every file; findings remove the pack and fail the save.
 Personal files (CLAUDE.local.md, settings.local.json) are never saved.
 Values the redactor is uncertain about (the SUPABASE_URL problem) are
 redacted by default; pass --review-uncertain to decide each one — the
-default answer still redacts, so an unattended run stays safe.`,
+default answer still redacts, so an unattended run stays safe.
+
+Some scan findings are reviewable: assignment- and entropy-shaped matches
+in bundled source, docs, or test fixtures (JSX props, prose examples,
+seeded fixture data) are common false positives, distinct from a
+known-format token match which always blocks. After inspecting a
+reviewable finding, pass --allow-finding <path>[:<line>] (repeatable) to
+waive it; a path ending in "/" waives every file under it. Waived findings
+are written to .agentpack-allow in the pack so a later validate run (e.g.
+in CI) does not need --allow-finding repeated.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !all {
@@ -54,7 +65,11 @@ default answer still redacts, so an unattended run stays safe.`,
 					return fmt.Errorf("cannot derive a pack name from directory %q; pass --name", dir)
 				}
 			}
-			return runSaveAll(cmd, adapters(), dir, packName, projectDir, reviewUncertain)
+			allow, err := parseAllowFindings(allowFinding)
+			if err != nil {
+				return err
+			}
+			return runSaveAll(cmd, adapters(), dir, packName, projectDir, reviewUncertain, allow, strict)
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "save every portable component without prompting")
@@ -63,10 +78,14 @@ default answer still redacts, so an unattended run stays safe.`,
 		"project directory to scan for project-scoped components (empty to skip)")
 	cmd.Flags().BoolVar(&reviewUncertain, "review-uncertain", false,
 		"prompt for each value the redactor is uncertain about (default answer redacts)")
+	cmd.Flags().BoolVar(&strict, "strict", false,
+		"treat reviewable findings (heuristic matches in docs, source, tests and lockfiles) as blocking")
+	cmd.Flags().StringArrayVar(&allowFinding, "allow-finding", nil,
+		"waive a reviewable secret-scan finding: <path>[:<line>] (repeatable; path ending in / waives a whole directory)")
 	return cmd
 }
 
-func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projectDir string, reviewUncertain bool) error {
+func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projectDir string, reviewUncertain bool, allow []secrets.AllowEntry, strict bool) error {
 	out := cmd.OutOrStdout()
 	scope := model.ScanScope{Global: true, ProjectDir: projectDir}
 	results := engine.ScanAll(adapters, scope)
@@ -127,17 +146,24 @@ func runSaveAll(cmd *cobra.Command, adapters []engine.Adapter, dir, name, projec
 			fmt.Fprintln(out, "  (uncertain values were redacted by default; rerun with --review-uncertain to decide each one)")
 		}
 	}
+	blocking, reviewable, allowed, err := packio.WritePack(dir, res, allow, strict)
+	// Printed after the write: bundling records what it refused to copy
+	// (vendored dependencies, VCS metadata, dotenv files) as warnings.
 	for _, w := range res.Warnings {
 		fmt.Fprintf(out, "warning: %s\n", w)
 	}
-
-	findings, err := packio.WritePack(dir, res)
-	if len(findings) > 0 {
-		fmt.Fprintln(cmd.ErrOrStderr(), "suspected secrets in pack content:")
-		for _, f := range findings {
-			fmt.Fprintf(cmd.ErrOrStderr(), "  %s:%d %s %s\n", f.Path, f.Line, f.Rule, f.Excerpt)
+	if len(reviewable) > 0 {
+		printReviewableSummary(out, reviewable)
+	}
+	if len(allowed) > 0 {
+		fmt.Fprintf(out, "waived %d reviewed finding(s) (recorded in %s):\n", len(allowed), packio.AllowlistFilename)
+		for _, f := range allowed {
+			fmt.Fprintf(out, "  %s:%d %s\n", f.Path, f.Line, f.Rule)
 		}
-		fmt.Fprintln(cmd.ErrOrStderr(), "fix the source files above and retry; nothing was saved")
+	}
+	if len(blocking) > 0 {
+		printFindings(cmd.ErrOrStderr(), blocking)
+		fmt.Fprintln(cmd.ErrOrStderr(), "fix the source files above, or if a reviewable finding is a false positive, retry with --allow-finding <path>[:<line>]; nothing was saved")
 	}
 	if err != nil {
 		return err

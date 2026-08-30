@@ -36,7 +36,7 @@ func (e *InvalidPackError) Error() string {
 // must not be restorable either — and returns *InvalidPackError when the
 // gate fails. A plain error means I/O-level failure (directory unreadable).
 func ReadPack(dir string) (*Pack, error) {
-	issues, findings, err := ValidatePack(dir)
+	issues, findings, _, err := ValidatePack(dir, nil)
 	if err != nil {
 		return nil, err
 	}

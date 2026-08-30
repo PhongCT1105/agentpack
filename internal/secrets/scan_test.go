@@ -152,6 +152,53 @@ func TestScanPackErrors(t *testing.T) {
 	}
 }
 
+// TestReleaseBlocking_JSXPropsDoNotFalsePositive guards the false-positive
+// class that made save --all unusable in dogfooding (docs/backlog.md P2.9):
+// JSX/template attribute values like key={item.userId} share the KEY=value
+// shape with a real assignment (the key name "key" is even secret-shaped)
+// but are code expressions, never literal credentials.
+func TestReleaseBlocking_JSXPropsDoNotFalsePositive(t *testing.T) {
+	got, err := ScanPack(filepath.Join("testdata", "packscan", "clean"))
+	if err != nil {
+		t.Fatalf("ScanPack(clean) error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ScanPack(clean) = %+v, want no findings (app.jsx's key={item.userId} must not false-positive)", got)
+	}
+}
+
+func TestScanPackTiersReviewableFindings(t *testing.T) {
+	got, err := ScanPack(filepath.Join("testdata", "packscan", "review"))
+	if err != nil {
+		t.Fatalf("ScanPack(review) error: %v", err)
+	}
+	byPath := map[string]Finding{}
+	for _, f := range got {
+		byPath[f.Path] = f
+	}
+
+	cases := []struct {
+		path       string
+		reviewable bool
+	}{
+		{"README.md", true},             // docs: assignment-shaped example
+		{"scripts/deploy.py", true},     // source: assignment-shaped code
+		{"testdata/fixture.json", true}, // test fixture dir
+		{"config/settings.json", false}, // real config: never waivable
+		{"config/token.md", false},      // format channel always blocks, even in docs
+	}
+	for _, c := range cases {
+		f, ok := byPath[c.path]
+		if !ok {
+			t.Errorf("ScanPack(review) missing expected finding in %s\ngot: %+v", c.path, got)
+			continue
+		}
+		if f.Reviewable != c.reviewable {
+			t.Errorf("ScanPack(review) %s: Reviewable = %v, want %v (rule %s)", c.path, f.Reviewable, c.reviewable, f.Rule)
+		}
+	}
+}
+
 func TestScanPackFindingsAreOrdered(t *testing.T) {
 	got, err := ScanPack(filepath.Join("testdata", "packscan", "leaky"))
 	if err != nil {

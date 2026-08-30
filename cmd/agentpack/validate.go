@@ -9,17 +9,26 @@ import (
 )
 
 func newValidateCmd() *cobra.Command {
-	return &cobra.Command{
+	var allowFinding []string
+	cmd := &cobra.Command{
 		Use:   "validate <dir>",
 		Short: "Check a pack directory against the spec and scan it for secrets",
 		Long: `Validate checks a pack directory (docs/spec/pack-manifest.md): manifest
 schema, component name uniqueness, source shape, bundled paths — and always
-runs the whole-pack secret scan. Any issue or finding exits nonzero, so a
-pack repository can run this in CI on every commit.`,
+runs the whole-pack secret scan. Any issue or a still-blocking finding exits
+nonzero, so a pack repository can run this in CI on every commit.
+
+A committed .agentpack-allow file in the pack (docs/spec/pack-manifest.md)
+waives reviewable findings automatically — see agentpack save --help.
+--allow-finding <path>[:<line>] adds one-off local waivers for this run only.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := args[0]
-			issues, findings, err := packio.ValidatePack(dir)
+			allow, err := parseAllowFindings(allowFinding)
+			if err != nil {
+				return err
+			}
+			issues, blocking, allowed, err := packio.ValidatePack(dir, allow)
 			if err != nil {
 				return err
 			}
@@ -27,14 +36,21 @@ pack repository can run this in CI on every commit.`,
 			for _, issue := range issues {
 				fmt.Fprintf(out, "issue: %s\n", issue)
 			}
-			for _, f := range findings {
-				fmt.Fprintf(out, "suspected secret: %s:%d %s %s\n", f.Path, f.Line, f.Rule, f.Excerpt)
+			if len(allowed) > 0 {
+				fmt.Fprintf(out, "waived %d reviewed finding(s):\n", len(allowed))
+				for _, f := range allowed {
+					fmt.Fprintf(out, "  %s:%d %s\n", f.Path, f.Line, f.Rule)
+				}
 			}
-			if len(issues) > 0 || len(findings) > 0 {
-				return fmt.Errorf("pack is invalid: %d issue(s), %d suspected secret(s)", len(issues), len(findings))
+			printFindings(out, blocking)
+			if len(issues) > 0 || len(blocking) > 0 {
+				return fmt.Errorf("pack is invalid: %d issue(s), %d suspected secret(s)", len(issues), len(blocking))
 			}
 			fmt.Fprintf(out, "pack %s is valid\n", dir)
 			return nil
 		},
 	}
+	cmd.Flags().StringArrayVar(&allowFinding, "allow-finding", nil,
+		"waive a reviewable secret-scan finding for this run: <path>[:<line>] (repeatable; path ending in / waives a whole directory)")
+	return cmd
 }

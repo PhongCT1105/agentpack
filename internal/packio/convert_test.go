@@ -418,12 +418,15 @@ func TestWritePackRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(t.TempDir(), "pack")
-	findings, err := WritePack(dir, res)
+	findings, _, allowed, err := WritePack(dir, res, nil, false)
 	if err != nil {
 		t.Fatalf("WritePack() error: %v (findings %+v)", err, findings)
 	}
 	if len(findings) != 0 {
 		t.Fatalf("WritePack() findings = %+v, want none", findings)
+	}
+	if len(allowed) != 0 {
+		t.Fatalf("WritePack() allowed = %+v, want none (no allowlist given)", allowed)
 	}
 
 	data, err := os.ReadFile(filepath.Join(dir, ManifestFilename))
@@ -464,15 +467,51 @@ func TestReleaseBlocking_WritePackBlocksOnLeakyBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(t.TempDir(), "pack")
-	findings, err := WritePack(dir, res)
+	findings, _, allowed, err := WritePack(dir, res, nil, false)
 	if err == nil {
 		t.Fatal("WritePack(leaky bundle) = nil error, want blocking error")
 	}
 	if len(findings) == 0 {
 		t.Error("WritePack(leaky bundle) returned no findings")
 	}
+	if len(allowed) != 0 {
+		t.Errorf("WritePack(leaky bundle) allowed = %+v, want none", allowed)
+	}
 	if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
 		t.Errorf("leaky pack dir left on disk after blocked save: %v", statErr)
+	}
+}
+
+// TestReleaseBlocking_WritePackAllowlistCannotWaiveAFormatMatch guards the
+// review flow's safety property (docs/backlog.md P2.9): --allow-finding
+// only ever waives a Reviewable finding. A known-format token match, like
+// the leaky skill's seeded GitHub token, must still block the save even
+// when an allow entry names its exact path — an allowlist must never be
+// usable to smuggle a real secret through.
+func TestReleaseBlocking_WritePackAllowlistCannotWaiveAFormatMatch(t *testing.T) {
+	inv := model.Inventory{
+		Tool: model.ToolClaudeCode,
+		Components: []model.Component{
+			model.Skill{Spec: model.SkillSpec{
+				Name: "leaky", Scope: model.ScopeGlobal, Dir: fixture(t, "leaky-skill"),
+			}},
+		},
+	}
+	res, err := Convert([]model.Inventory{inv}, ConvertOptions{Name: "leaky-pack"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "pack")
+	allow := []secrets.AllowEntry{{Path: "skills/leaky/SKILL.md"}}
+	findings, _, allowed, err := WritePack(dir, res, allow, false)
+	if err == nil {
+		t.Fatal("WritePack(leaky bundle, allow-listed path) = nil error, want blocking error")
+	}
+	if len(findings) == 0 {
+		t.Error("WritePack(leaky bundle, allow-listed path) returned no findings; the format match must still block")
+	}
+	if len(allowed) != 0 {
+		t.Errorf("WritePack(leaky bundle, allow-listed path) allowed = %+v, want none", allowed)
 	}
 }
 
@@ -482,7 +521,7 @@ func TestWritePackIntoExistingEmptyDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir() // exists and is empty
-	if _, err := WritePack(dir, res); err != nil {
+	if _, _, _, err := WritePack(dir, res, nil, false); err != nil {
 		t.Fatalf("WritePack(existing empty dir) error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ManifestFilename)); err != nil {
@@ -499,10 +538,83 @@ func TestWritePackRefusesNonEmptyDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "existing.txt"), []byte("keep me"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := WritePack(dir, res); err == nil {
+	if _, _, _, err := WritePack(dir, res, nil, false); err == nil {
 		t.Error("WritePack(non-empty dir) = nil error, want error")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "existing.txt")); err != nil {
 		t.Errorf("existing file damaged by refused write: %v", err)
+	}
+}
+
+// TestWritePackAllowFindingWaivesReviewableFinding covers the review flow
+// end to end (docs/backlog.md P2.9). A bundled skill with a docs-context
+// assignment-shaped match is Reviewable, so by default it is reported and
+// the save succeeds; under strict it blocks, and it stops blocking once the
+// exact finding is waived via allow — with the used entry recorded in
+// AllowlistFilename so a later validate doesn't need it repeated.
+func TestWritePackAllowFindingWaivesReviewableFinding(t *testing.T) {
+	inv := model.Inventory{
+		Tool: model.ToolClaudeCode,
+		Components: []model.Component{
+			model.Skill{Spec: model.SkillSpec{
+				Name: "reviewable", Scope: model.ScopeGlobal, Dir: fixture(t, "reviewable-skill"),
+			}},
+		},
+	}
+	res, err := Convert([]model.Inventory{inv}, ConvertOptions{Name: "reviewable-pack"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Default: reported, not fatal — the pack is written.
+	dir0 := filepath.Join(t.TempDir(), "pack")
+	blocking0, reviewable0, _, err := WritePack(dir0, res, nil, false)
+	if err != nil {
+		t.Fatalf("WritePack(reviewable bundle, non-strict) error: %v (blocking %+v)", err, blocking0)
+	}
+	if len(blocking0) != 0 {
+		t.Errorf("WritePack(reviewable bundle, non-strict) blocking = %+v, want none", blocking0)
+	}
+	if len(reviewable0) != 1 {
+		t.Fatalf("WritePack(reviewable bundle, non-strict) reviewable = %+v, want one", reviewable0)
+	}
+
+	// Strict: the same finding blocks and the pack is removed.
+	dir := filepath.Join(t.TempDir(), "pack")
+	findings, _, allowed, err := WritePack(dir, res, nil, true)
+	if err == nil {
+		t.Fatal("WritePack(reviewable bundle, strict, no allow) = nil error, want blocking error")
+	}
+	if len(findings) != 1 || !findings[0].Reviewable {
+		t.Fatalf("WritePack(reviewable bundle, strict) findings = %+v, want one Reviewable finding", findings)
+	}
+	if len(allowed) != 0 {
+		t.Errorf("WritePack(reviewable bundle, strict) allowed = %+v, want none", allowed)
+	}
+
+	// Strict + allowlisted: no longer blocks.
+	dir2 := filepath.Join(t.TempDir(), "pack")
+	allow := []secrets.AllowEntry{{Path: findings[0].Path, Line: findings[0].Line}}
+	blocking, _, allowedFindings, err := WritePack(dir2, res, allow, true)
+	if err != nil {
+		t.Fatalf("WritePack(reviewable bundle, allow-listed) error: %v (blocking %+v)", err, blocking)
+	}
+	if len(blocking) != 0 {
+		t.Errorf("WritePack(reviewable bundle, allow-listed) blocking = %+v, want none", blocking)
+	}
+	if len(allowedFindings) != 1 {
+		t.Errorf("WritePack(reviewable bundle, allow-listed) allowed = %+v, want one", allowedFindings)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir2, AllowlistFilename))
+	if err != nil {
+		t.Fatalf("%s not written: %v", AllowlistFilename, err)
+	}
+	entries, err := secrets.ParseAllowlist(data)
+	if err != nil {
+		t.Fatalf("%s does not parse: %v", AllowlistFilename, err)
+	}
+	if len(entries) != 1 || entries[0] != allow[0] {
+		t.Errorf("%s entries = %+v, want %+v", AllowlistFilename, entries, allow)
 	}
 }

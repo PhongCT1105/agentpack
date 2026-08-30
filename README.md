@@ -86,10 +86,14 @@ agentpack validate my-setup            # schema + secret scan; nonzero exit for 
 
 Saving redacts every secret into a credential *requirement* (the value is
 never stored), skips personal files (`CLAUDE.local.md`,
-`settings.local.json`), and re-scans the written pack as a final gate —
-a suspected secret anywhere, including inside bundled skill content,
-blocks the save. See the [pack-authoring guide](docs/guides/authoring.md).
-`restore` is the next phase of the [backlog](docs/backlog.md).
+`settings.local.json`), and re-scans the written pack as a final gate — a
+known credential format anywhere always blocks the save. Lower-confidence
+findings in bundled source, docs, or test fixtures (a JSX `key={...}` prop,
+a prose example) are reviewable: `save` reports them separately, and
+`--allow-finding <path>[:<line>]` waives one after you've checked it isn't
+real, recording the waiver in `.agentpack-allow` for CI to reuse. See the
+[pack-authoring guide](docs/guides/authoring.md). `restore` is the next
+phase of the [backlog](docs/backlog.md).
 
 ## Why
 

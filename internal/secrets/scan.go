@@ -20,6 +20,17 @@ type Finding struct {
 	Line    int    // 1-based
 	Rule    string // e.g. "format:github-token", "assignment", "entropy:high"
 	Excerpt string // masked, safe to display
+
+	// Reviewable reports whether a human can waive this finding via an
+	// allowlist entry (FilterAllowed, docs/security.md layer 3 review
+	// flow). A known credential-format match (channel 1) is never
+	// reviewable, regardless of where it appears — it always blocks. An
+	// assignment or entropy match (channels 2-3) is reviewable when it
+	// occurs in a docs, source, or test-fixture file, where the KEY=value
+	// and high-entropy shapes are common false-positive sources (JSX
+	// props, prose examples, seeded fixtures); the same match in a
+	// config-shaped file is still never reviewable.
+	Reviewable bool
 }
 
 // Unanchored cores of the value formats, for scanning free text. Matches
@@ -56,6 +67,76 @@ var docPlaceholderRes = []*regexp.Regexp{
 	regexp.MustCompile(`^<[^<>]+>$`),
 	regexp.MustCompile(`^\*{3,}$`),
 	regexp.MustCompile(`^(?i:x{4,})$`),
+}
+
+// fileClass buckets a pack-relative path by how likely an assignment- or
+// entropy-channel match in it is a real secret. classConfig is the fully
+// trusted default (env/JSON/YAML/TOML config, headers, credential files);
+// the others are common false-positive sources for those two channels
+// specifically (docs/security.md layer 3, P2.9): JSX/template attributes
+// and prose examples share the KEY=value shape with real config without
+// being real config, and test fixtures routinely carry secret-shaped seed
+// data on purpose. The format channel (channel 1) ignores this entirely —
+// a known token format blocks no matter where it appears.
+type fileClass int
+
+const (
+	classConfig fileClass = iota
+	classDocs
+	classSource
+	classTest
+)
+
+var (
+	sourceExts = map[string]bool{
+		".js": true, ".jsx": true, ".ts": true, ".tsx": true, ".py": true,
+		".go": true, ".rb": true, ".java": true, ".c": true, ".cc": true,
+		".cpp": true, ".h": true, ".hpp": true, ".rs": true, ".php": true,
+		".swift": true, ".kt": true, ".kts": true, ".scala": true, ".cs": true,
+		".sh": true, ".bash": true, ".zsh": true, ".lua": true,
+	}
+	docsExts = map[string]bool{".md": true, ".mdx": true, ".rst": true, ".adoc": true}
+	// Dependency lockfiles are wall-to-wall base64/hex integrity digests —
+	// sha512-… entries whose whole purpose is to be high-entropy. The
+	// entropy channel cannot say anything useful about them, so it is
+	// skipped for these files. The format channel still applies: a lockfile
+	// CAN legitimately leak a credential through a registry URL
+	// (https://user:token@registry.example.com), and the url-password and
+	// token-format rules still catch exactly that.
+	lockfileNames = map[string]bool{
+		"package-lock.json": true, "npm-shrinkwrap.json": true,
+		"yarn.lock": true, "pnpm-lock.yaml": true,
+		"bun.lock": true, "bun.lockb": true,
+		"cargo.lock": true, "poetry.lock": true, "pdm.lock": true,
+		"gemfile.lock": true, "composer.lock": true, "packages.lock.json": true,
+		"go.sum": true, "flake.lock": true, "uv.lock": true,
+	}
+	testDirs = map[string]bool{
+		"test": true, "tests": true, "testdata": true, "fixture": true,
+		"fixtures": true, "__tests__": true, "spec": true, "specs": true,
+		"examples": true, "example": true, "__mocks__": true, "mocks": true,
+	}
+)
+
+// classifyPath buckets relPath (slash-separated, relative to the pack
+// root). A path under a test/fixture directory at any depth is classTest
+// regardless of extension — seeded fixture data is the point of that
+// directory. Otherwise the extension decides.
+func classifyPath(relPath string) fileClass {
+	for _, part := range strings.Split(relPath, "/") {
+		if testDirs[strings.ToLower(part)] {
+			return classTest
+		}
+	}
+	ext := strings.ToLower(filepath.Ext(relPath))
+	switch {
+	case docsExts[ext]:
+		return classDocs
+	case sourceExts[ext]:
+		return classSource
+	default:
+		return classConfig
+	}
 }
 
 // ScanPack walks every regular file under root (a pack directory) and
@@ -112,8 +193,10 @@ func ScanPack(root string) ([]Finding, error) {
 func scanContent(relPath string, data []byte) []Finding {
 	var findings []Finding
 	taken := map[int]bool{} // lines that already have a finding
+	class := classifyPath(relPath)
 
-	// Channel 1: known credential formats, boundary-checked.
+	// Channel 1: known credential formats, boundary-checked. Never
+	// reviewable — a token-format match blocks regardless of path.
 	content := string(data)
 	for _, f := range scanFormats {
 		for _, loc := range f.re.FindAllStringIndex(content, -1) {
@@ -142,6 +225,13 @@ func scanContent(relPath string, data []byte) []Finding {
 				Excerpt: mask(content[loc[0]:loc[1]]),
 			})
 		}
+	}
+	reviewable := class != classConfig
+	isLockfile := lockfileNames[strings.ToLower(filepath.Base(relPath))]
+	if isLockfile {
+		// A lockfile is generated, never hand-authored: an assignment-shaped
+		// match in one is machine output, not a pasted credential.
+		reviewable = true
 	}
 
 	// Binary files get the format channel only: assignment and entropy
@@ -179,7 +269,7 @@ func scanContent(relPath string, data []byte) []Finding {
 			taken[line] = true
 			findings = append(findings, Finding{
 				Path: relPath, Line: line, Rule: "assignment",
-				Excerpt: key + "=" + mask(value),
+				Excerpt: key + "=" + mask(value), Reviewable: reviewable,
 			})
 			matched = true
 			break
@@ -189,13 +279,14 @@ func scanContent(relPath string, data []byte) []Finding {
 		}
 
 		// Channel 3: secret-grade entropy only. The uncertain band that
-		// save prompts about would be pure noise over prose and docs.
-		if entropyLevel(lineText, false) == Secret {
+		// save prompts about would be pure noise over prose and docs, and
+		// a lockfile is nothing but integrity digests (see lockfileNames).
+		if !isLockfile && entropyLevel(lineText, false) == Secret {
 			taken[line] = true
 			run := longestRun(lineText)
 			findings = append(findings, Finding{
 				Path: relPath, Line: line, Rule: "entropy:high",
-				Excerpt: mask(run),
+				Excerpt: mask(run), Reviewable: reviewable,
 			})
 		}
 	}
@@ -215,6 +306,14 @@ func assignmentValueSuspicious(value string) bool {
 		}
 	}
 	if strings.Contains(value, "://") { // URLs: the url-password format covers real leaks
+		return false
+	}
+	// Code expressions, not literal values: JSX/template attributes like
+	// key={item.userId} or onClick={() => ...} share the KEY=value shape
+	// with a real assignment — the key name can even be secret-shaped
+	// ("key" itself) — but a literal credential is never written wrapped
+	// in an unquoted expression.
+	if strings.HasPrefix(value, "{") || strings.HasPrefix(value, "(") || strings.Contains(value, "=>") {
 		return false
 	}
 	// Credentials essentially always carry a digit, mixed case, or symbols.

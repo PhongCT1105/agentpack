@@ -33,10 +33,20 @@ writes it to `my-setup/`. Along the way:
   and rerun.
 
 A word on bundling: `save` copies authored content (skills, agents,
-prompts, rules) into the pack. If your machine carries large third-party
-skill packages, the scan of all that bundled content can be noisy —
-authoring a pack by hand with only the components you mean to share is
-often the better product.
+prompts, rules) into the pack. Bundled source, docs, and test fixtures are
+where KEY=value and high-entropy shapes show up without being real
+config — a JSX prop like `key={item.userId}`, a `password=...` line in a
+prose example, seed data under a `testdata/` directory. The scanner
+distinguishes these: a known credential format (`ghp_...`, a PEM block, a
+JWT, and the like) always blocks no matter where it appears, but an
+assignment- or entropy-shaped match in source, docs, or a test-fixture
+path is *reviewable* rather than an unconditional dead end. `save`'s
+output marks reviewable findings separately from the always-blocking
+kind; after reading the file and confirming it is not a real secret,
+rerun with `--allow-finding <path>:<line>` (repeatable; a path ending in
+`/` waives a whole directory) to waive it. Waived findings are written to
+`.agentpack-allow` in the pack, so commit that file and a later `validate`
+— including in CI — honors it without repeating the flag.
 
 ## The deliberate path: write it by hand
 
@@ -165,10 +175,18 @@ values (absolute paths, hostnames).
   but would be dereferenced by archives and restores, so it is banned
 - **any suspected secret in any file**, bundled content included
 
-The secret scan always runs, even when the manifest is broken. If it
-flags something that genuinely is not a secret, remove or rephrase the
-offending content — findings are hard blocks by design, and excerpts in
-the output are masked, so re-run `validate` to check your fix.
+The secret scan always runs, even when the manifest is broken. Excerpts in
+the output are masked, so re-run `validate` after any fix to check it.
+
+A finding from a known credential format always blocks — remove or
+rephrase the offending content, there is no way around it. A finding from
+the assignment or entropy channel in bundled source, docs, or a
+test-fixture path is reviewable: after confirming it is not a real
+secret, either commit a `.agentpack-allow` entry (`<path>[:<line>]` per
+line, `#` comments allowed, a trailing `/` on the path waives a whole
+directory) or pass `--allow-finding` for a one-off local check. CI should
+rely on the committed file, not the flag, so the waiver is reviewable in
+the same PR as the content it covers.
 
 ## Publishing
 

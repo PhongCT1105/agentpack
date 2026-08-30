@@ -1,0 +1,3 @@
+# Token example
+
+Example: ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE

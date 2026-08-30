@@ -30,6 +30,12 @@ const (
 
 	// ManifestFilename is the manifest's fixed name inside a pack directory.
 	ManifestFilename = "agentpack.yaml"
+
+	// AllowlistFilename holds reviewed secret-scan findings a human has
+	// confirmed are not secrets (docs/security.md layer 3 review flow).
+	// ValidatePack loads it automatically when present; save writes it when
+	// --allow-finding waives a finding. Optional: most packs have none.
+	AllowlistFilename = ".agentpack-allow"
 )
 
 // Manifest is the top-level agentpack.yaml document.

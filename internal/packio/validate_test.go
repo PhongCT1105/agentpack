@@ -5,10 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/PhongCT1105/agentpack/internal/secrets"
 )
 
 func TestValidatePackGood(t *testing.T) {
-	issues, findings, err := ValidatePack(filepath.Join("testdata", "validate", "good"))
+	issues, findings, allowed, err := ValidatePack(filepath.Join("testdata", "validate", "good"), nil)
 	if err != nil {
 		t.Fatalf("ValidatePack(good) error: %v", err)
 	}
@@ -18,10 +20,13 @@ func TestValidatePackGood(t *testing.T) {
 	if len(findings) != 0 {
 		t.Errorf("ValidatePack(good) findings = %+v, want none", findings)
 	}
+	if len(allowed) != 0 {
+		t.Errorf("ValidatePack(good) allowed = %+v, want none", allowed)
+	}
 }
 
 func TestValidatePackBad(t *testing.T) {
-	issues, findings, err := ValidatePack(filepath.Join("testdata", "validate", "bad"))
+	issues, findings, _, err := ValidatePack(filepath.Join("testdata", "validate", "bad"), nil)
 	if err != nil {
 		t.Fatalf("ValidatePack(bad) error: %v", err)
 	}
@@ -88,7 +93,7 @@ func formatIssues(issues []Issue) string {
 }
 
 func TestReleaseBlocking_ValidateFlagsLeakyPack(t *testing.T) {
-	issues, findings, err := ValidatePack(filepath.Join("testdata", "validate", "leaky"))
+	issues, findings, allowed, err := ValidatePack(filepath.Join("testdata", "validate", "leaky"), nil)
 	if err != nil {
 		t.Fatalf("ValidatePack(leaky) error: %v", err)
 	}
@@ -97,6 +102,9 @@ func TestReleaseBlocking_ValidateFlagsLeakyPack(t *testing.T) {
 	}
 	if len(findings) != 1 || findings[0].Path != "prompts/deploy.md" || findings[0].Rule != "format:github-token" {
 		t.Errorf("ValidatePack(leaky) findings = %+v, want one github-token finding in prompts/deploy.md", findings)
+	}
+	if len(allowed) != 0 {
+		t.Errorf("ValidatePack(leaky) allowed = %+v, want none", allowed)
 	}
 }
 
@@ -119,7 +127,7 @@ func TestReleaseBlocking_ValidateRejectsSymlinkedContent(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(dir, "prompts", "deploy.md")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	issues, _, err := ValidatePack(dir)
+	issues, _, _, err := ValidatePack(dir, nil)
 	if err != nil {
 		t.Fatalf("ValidatePack(symlinked) error: %v", err)
 	}
@@ -142,7 +150,7 @@ func TestValidatePackRejectsBackslashPaths(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ManifestFilename), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	issues, _, err := ValidatePack(dir)
+	issues, _, _, err := ValidatePack(dir, nil)
 	if err != nil {
 		t.Fatalf("ValidatePack(backslashes) error: %v", err)
 	}
@@ -161,7 +169,7 @@ func TestValidatePackRejectsBackslashPaths(t *testing.T) {
 }
 
 func TestValidatePackMissingManifest(t *testing.T) {
-	issues, _, err := ValidatePack(t.TempDir())
+	issues, _, _, err := ValidatePack(t.TempDir(), nil)
 	if err != nil {
 		t.Fatalf("ValidatePack(empty dir) error: %v", err)
 	}
@@ -177,7 +185,7 @@ func TestValidatePackMissingManifest(t *testing.T) {
 }
 
 func TestValidatePackMissingDir(t *testing.T) {
-	if _, _, err := ValidatePack(filepath.Join("testdata", "validate", "nope")); err == nil {
+	if _, _, _, err := ValidatePack(filepath.Join("testdata", "validate", "nope"), nil); err == nil {
 		t.Error("ValidatePack(missing dir) = nil error, want error")
 	}
 }
@@ -190,14 +198,74 @@ func TestValidatePackAcceptsWritePackOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(t.TempDir(), "pack")
-	if _, err := WritePack(dir, res); err != nil {
+	if _, _, _, err := WritePack(dir, res, nil, false); err != nil {
 		t.Fatal(err)
 	}
-	issues, findings, err := ValidatePack(dir)
+	issues, findings, allowed, err := ValidatePack(dir, nil)
 	if err != nil {
 		t.Fatalf("ValidatePack(written pack) error: %v", err)
 	}
-	if len(issues) != 0 || len(findings) != 0 {
-		t.Errorf("written pack does not validate: issues=%v findings=%+v", issues, findings)
+	if len(issues) != 0 || len(findings) != 0 || len(allowed) != 0 {
+		t.Errorf("written pack does not validate: issues=%v findings=%+v allowed=%+v", issues, findings, allowed)
+	}
+}
+
+// TestValidatePackLoadsAllowlistFile covers the durable side of the review
+// flow (docs/backlog.md P2.9): a committed .agentpack-allow in the pack
+// waives a matching reviewable finding automatically, without --allow-finding.
+func TestValidatePackLoadsAllowlistFile(t *testing.T) {
+	dir := t.TempDir()
+	manifest := "apiVersion: agentpack/v0\nkind: Pack\nmetadata:\n  name: reviewme\n"
+	if err := os.WriteFile(filepath.Join(dir, ManifestFilename), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("password=FAKEexample12345\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, AllowlistFilename), []byte("notes.md:1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	issues, blocking, allowed, err := ValidatePack(dir, nil)
+	if err != nil {
+		t.Fatalf("ValidatePack(allowlisted) error: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Errorf("ValidatePack(allowlisted) issues = %v, want none", issues)
+	}
+	if len(blocking) != 0 {
+		t.Errorf("ValidatePack(allowlisted) blocking = %+v, want none (waived by %s)", blocking, AllowlistFilename)
+	}
+	if len(allowed) != 1 || allowed[0].Path != "notes.md" {
+		t.Errorf("ValidatePack(allowlisted) allowed = %+v, want the notes.md finding", allowed)
+	}
+}
+
+// TestValidatePackAllowFindingCannotWaiveAFormatMatch mirrors the WritePack
+// safety guarantee: neither a --allow-finding argument nor a committed
+// .agentpack-allow entry can silence a known-format token match.
+func TestValidatePackAllowFindingCannotWaiveAFormatMatch(t *testing.T) {
+	dir := t.TempDir()
+	manifest := "apiVersion: agentpack/v0\nkind: Pack\nmetadata:\n  name: notwaivable\n"
+	if err := os.WriteFile(filepath.Join(dir, ManifestFilename), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	allow := []secrets.AllowEntry{{Path: "notes.md"}}
+	issues, blocking, allowed, err := ValidatePack(dir, allow)
+	if err != nil {
+		t.Fatalf("ValidatePack(allow-listed format match) error: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Errorf("ValidatePack(allow-listed format match) issues = %v, want none", issues)
+	}
+	if len(blocking) != 1 {
+		t.Errorf("ValidatePack(allow-listed format match) blocking = %+v, want the format match to still block", blocking)
+	}
+	if len(allowed) != 0 {
+		t.Errorf("ValidatePack(allow-listed format match) allowed = %+v, want none", allowed)
 	}
 }

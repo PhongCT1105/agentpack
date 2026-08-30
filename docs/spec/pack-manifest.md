@@ -9,6 +9,7 @@ A **pack** is a portable, secrets-free representation of an agentic development 
 ```
 my-setup/
 ├── agentpack.yaml          # the manifest (this spec)
+├── .agentpack-allow        # reviewed secret-scan findings (optional, see docs/security.md)
 ├── skills/                 # bundled skill directories (optional)
 │   └── my-custom-skill/
 │       └── SKILL.md
@@ -22,6 +23,8 @@ my-setup/
 ```
 
 The manifest lists every component of the environment. Components either **reference** an installable source (an npm package, a git repo, a marketplace id) or **bundle** content in the pack directory. Referencing is preferred; bundling is for content the developer authored themselves.
+
+`.agentpack-allow`, when present, waives specific secret-scan findings a human has reviewed and confirmed are not secrets — one `<path>[:<line>]` entry per line (`#` comments allowed; a path ending in `/` waives a whole directory). It only ever applies to the scanner's lower-confidence findings (docs/security.md layer 3); a known credential-format match cannot be waived this way. `agentpack save --allow-finding` writes it; `agentpack validate` loads it automatically.
 
 ## Top-level structure
 

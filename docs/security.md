@@ -31,7 +31,9 @@ Redacted values become `credentials` requirements. Uncertain cases are surfaced 
 
 ### Layer 3 — whole-pack scan (defense in depth)
 
-After the pack directory is written, an independent scanner (gitleaks-style rules) runs over every file — including bundled skills, rules, and prompts, where users paste secrets more often than anyone admits. Findings **block** save/validate/publish. `agentpack validate` runs the same scan, so CI on a pack repo re-verifies on every commit.
+After the pack directory is written, an independent scanner (gitleaks-style rules) runs over every file — including bundled skills, rules, and prompts, where users paste secrets more often than anyone admits. Findings **block** save/validate/publish by default. `agentpack validate` runs the same scan, so CI on a pack repo re-verifies on every commit.
+
+Not every finding carries the same confidence. A match against a known credential format (`ghp_…`, a PEM block, a JWT, an AWS key, and the like) is near-certain and **always blocks**, regardless of where it appears. A match from the weaker assignment or entropy heuristics is *reviewable* when it occurs in bundled source, docs, or a test-fixture path — these are exactly where `KEY=value` and high-entropy shapes turn up without being real config (a JSX prop, a prose example, seeded fixture data), and dogfooding found them dominating real-world `save` runs (docs/backlog.md P2.9). A reviewable finding still blocks by default — the fail-safe default is unchanged — but after a human inspects it and confirms it is not a secret, it can be waived with a `.agentpack-allow` entry in the pack (`<path>[:<line>]`, committed and reviewed like any other content) or a one-off `--allow-finding` flag. The allowlist can never waive a high-confidence format match; there is no flag or file entry that silences one.
 
 ### Seeded fixtures
 
